@@ -8,9 +8,17 @@
   -->
   <include name="openvela.xml"/>
 
+  <!--
+    2026-09-19 清理：组织委员会模板残留的三个占位样例已移除
+    （app/hello_app、quickapp/hello_quickapp、board/contest_board —
+    样例内仍写着 team 000），其 <linkfile> 一并删除。
+
+    新增作品形态时，按同样规则在此补回对应的一条：
+
+      <linkfile src="app/<你的app>"         dest="packages/demos/contest2026_496_<你的app>"/>
+      <linkfile src="quickapp/<你的快应用>"  dest="packages/apps/contest2026_496_<你的快应用>"/>
+      <linkfile src="board/<你的board>"      dest="vendor/openvela/boards/contest2026_496_<你的board>"/>
+  -->
   <project path="contest2026_496_diaochabingtuan" name="contest2026_496_diaochabingtuan">
-    <linkfile src="app/hello_app" dest="packages/demos/contest2026_496_hello_app"/>
-    <linkfile src="quickapp/hello_quickapp" dest="packages/apps/contest2026_496_hello_quickapp"/>
-    <linkfile src="board/contest_board" dest="vendor/openvela/boards/contest2026_496_board"/>
   </project>
 </manifest>
