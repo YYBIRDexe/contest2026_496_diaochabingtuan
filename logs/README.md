@@ -91,6 +91,11 @@ Events checked: 10048
 | U2P 实训箱（Horizon X3M，`192.168.1.104`） | 19 | 2026-09-15 ~ 09-17，设备端语音链路开发 |
 | 课题组另一台 Windows 电脑 | 8 | 2026-09-14 ~ 09-19，四车网络/域/语音控车 |
 
+> **关于「源文件 39 个、这里 36 个」**：另 3 个 rollout 是 Codex 的**实时语音对话**会话
+> （`thread_source: "voice_chat"`），每个文件仅 3 行 —— `session_meta` +
+> `realtime_session_started` + `realtime_session_closed`，**不含任何对话内容**，
+> 无可转录，故未纳入。这一点主动说明，便于核对。
+
 > **如实说明**：另一台电脑上运行的是 **Codex Desktop 外接自定义模型后端**
 > （`model_provider: "custom"`，`model: "deepseek-v4-flash"`）。
 > **工具本身仍是官方支持列表中的 Codex**，外接模型只是客户端配置；
