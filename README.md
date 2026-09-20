@@ -2,109 +2,152 @@
 
 > **2026 首届 openvela AI 硬件开发者大赛** · 参赛作品仓
 > **队伍**：调教小车太难了 ｜ **选题方向**：AI 硬件产品创新
-> **作品形态**：**快应用**（`quickapp/velaguard-inspection/`）→ 映射到 `packages/apps/contest2026_496_velaguard-inspection`
-> **报名硬件形态**：模拟器（Vela Emulator `goldfish-arm64-v8a-ap`，720×1280 竖屏）
+> **作品形态**：**快应用**（`quickapp/velaguard-inspection/`）→ 由本仓 manifest 映射到 `packages/apps/contest2026_496_velaguard-inspection`
+> **运行平台**：openvela Vela Emulator（`goldfish-arm64-v8a-ap`，720×1280 竖屏）
+> **本仓另含**同课题组第二件作品 **VelaMecanum**（四车自主编队，应用形态），见 `app/vela_mecanum/`
 
 ---
 
 ## 一、作品简介
 
-面向园区 / 厂区巡检场景的**自然语言调度与安全监督系统**。
+**一句话定位**
 
-说一句「开始巡检」，端侧 AI Agent 理解意图、按自定义 Skill 编排任务并**主动**上报异常；
-边缘层把任务单下发给多台 ROS 2 麦克纳姆小车，驱动它们完成四区分区巡检；
-触控看板实时呈现任务状态、覆盖情况与异常闭环。
+> 面向**实验室、展厅与教学空间的管理人员**，把固定区域的检查任务分派给不同编号的小车自主执行，
+> 并由一个运行在 openvela 上、**会主动盯场的 AI Agent** 负责上报异常与闭环；
+> 解决「人工巡查重复、区域覆盖不均、异常信息分散且没人第一时间知道」的问题。
 
-**要解决的问题**：传统多机器人巡检依赖人工逐台派单、人工盯屏，异常发现滞后。
-本作品把「派单 → 执行 → 回执 → 异常告警 → 汇总」做成闭环，
-并把**主动告警**（而非被动问答）作为核心交互形态——这正是赛题对
-「纯对话机器人」的排除条款所指向的能力。
+**做什么**
+
+在 openvela 上部署一个 AI Agent 作为「值班调度员」：它按周期主动汇总四个区域的覆盖情况、
+在车辆阻塞或失联时**第一时间主动告警**并给出改派建议、
+并记住上一轮未完成的区域在下一轮开头主动提醒。
+说一句「开始巡检」，Agent 理解意图、按自定义 Skill 编排任务下发，
+边缘层把任务单转给四台 ROS 2 麦克纳姆小车执行，触控界面呈现任务状态与异常闭环。
+
+**面向谁**
+
+- 直接用户：实验室 / 展厅 / 教学空间的值班管理员
+- 最终受益者：空间的使用者与管理者（巡检不再依赖人工全程盯守）
+
+**解决什么问题**
+
+| 问题 | 现状 | 本作品 |
+|---|---|---|
+| 人工巡查重复、覆盖不均 | 靠人走一遍，容易漏区、难以留痕 | 四车分区执行固定路线，覆盖状态可查 |
+| 异常信息分散 | 出问题要事后翻各车日志 | Agent **主动**告警，异常主动找上门 |
+| 未完成区域被静默漏掉 | 没人记得上轮哪个区没查 | Agent 记住并**主动提醒**顺延 |
+| 无人盯场 | 管理员不可能全程盯屏 | 定时主动汇报 + 阈值主动判定失联 |
 
 **亮点**
 
-- **主动 + 执行**：异常回执到达即触发主动播报与上下文提醒，不等用户提问
-- **端侧 AI**：快应用通过官方 `@system.velaclaw` 通道调用端侧 AI Agent，并展示它调了哪些工具
-- **自定义 Skill**：以 Markdown 沉淀区域表与车辆映射、任务单字段与回执语义、阻塞/失联判定阈值与处置流程、安全规则
-- **地图是真的**：地图为车端真实 ROS 地图 `classroom.pgm` 自动转出的矢量轮廓（55 个墙块），非占位图
+- **主动 + 执行**（非纯对话机器人）：四类主动任务——**事件主动**（收到异常回执立即告警）、
+  **阈值主动**（连续 20 秒无回执判定失联并摘除该车）、**定时主动**（周期汇总覆盖情况）、
+  **上下文主动**（每轮开始前读记忆，提醒上轮未完成区域）
+- **端侧 AI 通道**：快应用通过官方 `@system.velaclaw.ask()` 调用端侧 AI Agent，
+  并把 Agent **调用了哪些工具**一并显示出来
+- **自定义 Skill**：以 Markdown 沉淀区域表与车辆映射、任务单字段与回执语义、
+  阻塞/失联判定阈值与处置流程、安全规则（赛题必做项）
+- **地图是真的**：界面地图为车端真实 ROS 地图 `classroom.pgm`（350×197 格，0.05 m/格）
+  自动转出的矢量轮廓（55 个墙块），不是占位图
+- **端端协作**：触控交互层 / 边缘层 / 车端三层分工，构成赛题加分项「端云·端端协作」的落地形态
 
 **系统架构**
 
 ```text
 ┌──────────────────────────────────────────────────────┐
 │ ① 触控交互层 —— VelaGuard 快应用（本仓 quickapp/）     │
-│   · 七个视图：桌面/调度台/地图与路线/区域与任务/        │
-│     巡检记录/语音助手/系统与链路                       │
+│   · 七个视图：桌面 / 调度台 / 地图与路线 / 区域与任务 / │
+│     巡检记录 / 语音助手 / 系统与链路                   │
 │   · 端侧 AI 对话：@system.velaclaw.ask()              │
 │   · 自定义 Skill：skills/inspection.md                │
 └───────────────┬──────────────────────────────────────┘
                 │ 端侧 Agent 通道 / HTTP
                 ▼
 ┌──────────────────────────────────────────────────────┐
-│ ② 边缘层 —— U2P(X3M, Ubuntu) / M1 实训箱              │
+│ ② 边缘层 —— 小米 AIoT 实训箱 M1（U2P Horizon X3M）    │
 │   · VelaGuard 看板（本仓 edge-dashboard/）             │
 │   · 车端执行器 patrol_controller.py（realcar/）        │
 │   · 语音链路（唤醒 → ASR → 意图 → 下发 → TTS 播报）     │
 └───────────────┬──────────────────────────────────────┘
-                │ ws://…:9090  rosbridge → /cmd_vel
+                │ ws://<车>:9090  rosbridge → /cmd_vel
                 ▼
-        四台 ROS 2 麦克纳姆小车（车端本地安全逻辑最高优先）
+   四台 MentorPi 麦克纳姆小车（Raspberry Pi 5 / ROS 2）
+   —— 车端本地安全逻辑最高优先，遇障自行停车
 ```
 
 ---
 
 ## 二、选题方向
 
-**AI 硬件产品创新**。作品落地 openvela 的 **AI**（端侧 Agent、Skill 加载器、主动任务、记忆机制）
-与 **多媒体**（端侧语音交互链路）能力。
+**AI 硬件产品创新**。
+
+理由：本作品把「决策与闭环」放在 openvela 端侧——任务编排、状态机、异常判定、主动告警、
+跨轮次记忆全部运行在 openvela 上；口语文案与汇总文本由云端 LLM 润色；感知与执行在车端。
+落地的 openvela 能力为：
+
+| openvela 能力 | 在本作品中的落点 |
+|---|---|
+| **AI**（`packages_ai_agent`） | 意图路由、Skill 加载器、**主动任务机制**、记忆机制 |
+| **多媒体**（端侧语音交互链路） | 唤醒 → ASR → 意图 → 下发 → TTS 播报 |
+| **快应用框架** | 触控界面七视图、`@system.velaclaw` 端侧 Agent 通道 |
+
+> **不是**纯云端应用（Agent 运行在 openvela 上）；
+> **不是**纯对话机器人（有主动任务 + 真实工具调用，能派单并驱动四台车）。
 
 ---
 
-## 三、作品代码在哪（目录结构）
+## 三、目录结构
 
 ```text
 /
 ├── README.md                            本文件
-├── contest2026_496_diaochabingtuan.xml  本仓清单（含 1 条快应用 <linkfile>）
+├── contest2026_496_diaochabingtuan.xml  本仓 manifest（含 1 条快应用 <linkfile>）
 ├── openvela.xml                         openvela 全量工程清单（未改动）
-├── quickapp/
-│   └── velaguard-inspection/            ★ 作品形态：快应用源码工程
-│       ├── src/                         源码（唯一需要手改的地方）
-│       │   ├── manifest.json            包名 com.velaguard.inspection，720×1280
-│       │   ├── app.ux.tmpl              openvela 入口模板
-│       │   ├── app-shell.js             宿主无关外壳（250ms tick、切页、事件派发）
-│       │   ├── common/                  data / map / store / agent / tpl / ui / router
-│       │   └── pages/                   七个视图（Home/Dispatch/Map/Zones/Records/Voice/System）
-│       ├── tools/                       19 个脚本：测试、打包、地图转换、产物自检
-│       ├── skills/inspection.md         ★ 自定义 Skill（赛题必做项）
-│       ├── device/                      E5 触控屏演示宿主（可跑、可录）
-│       ├── realcar/                     真车联动：车端执行器 + 路线表 + 逐轮实测证据
-│       ├── dist-openvela/               部署产物 app.ux + manifest.json（生成物）
-│       └── docs/                        部署、命令单、地图与路线、拍摄执行单
+│
+├── quickapp/velaguard-inspection/       ★ VelaGuard：快应用源码工程（本仓主要作品）
+│   ├── src/                             源码（唯一需要手改的地方，19 文件）
+│   │   ├── manifest.json                包名 com.velaguard.inspection，720×1280
+│   │   ├── app.ux.tmpl                  openvela 入口模板（产物由脚本拼装）
+│   │   ├── app-shell.js                 宿主无关外壳：250ms tick、切页、事件派发
+│   │   ├── common/                      data / map / map-data / store / agent / tpl / ui / router / styles
+│   │   └── pages/                       七个视图（Home / Dispatch / Map / Zones / Records / Voice / System）
+│   ├── tools/                           20 个脚本：测试、打包、ROS 地图转矢量、产物自检
+│   ├── skills/inspection.md             ★ 自定义 Skill（赛题必做项）
+│   ├── device/                          E5 触控屏演示宿主（可跑、可录）
+│   ├── realcar/                         真车联动：车端执行器 + 路线表 + 逐轮实测证据 + 6 张截图
+│   ├── dist-openvela/                   部署产物 app.ux + manifest.json（生成物）
+│   └── docs/                            部署到 openvela / 模拟器命令单 / 地图与路线 / 拍摄执行单
+│
 ├── edge-dashboard/                      边缘层工程（M1/U2P，Node + Python，不参与 openvela 编译）
-├── app/
-│   └── vela_mecanum/                    ★ 第二件作品：四车自主编队（应用形态）
-│       ├── openvela/                    openvela 端 ai_agent 改造 + Formation Lab + ROS 2 bringup
-│       ├── outputs/formation-kit/       当前四车任务控制程序与现场任务记录
-│       ├── work/                        部署、诊断、定位、安装与验收工具
-│       ├── docs/                        代码索引 / 验收状态 / 测试结果 / 移交说明
-│       └── 作品说明.md                  该作品的完整说明（简介 / 运行方式 / 验收结果）
-└── logs/                                AI Coding 日志，一人一目录
+│   ├── src/ linux/ tools/ data/ docs/   看板源码、设备脚本、调试工具、文档
+│   └── preview/index.html               零依赖自包含预览页（双击可看界面）
+│
+├── app/vela_mecanum/                    ★ 第二件作品：VelaMecanum 四车自主编队（应用形态）
+│   ├── openvela/                        openvela 端 ai_agent 改造 + Formation Lab + ROS 2 bringup
+│   ├── outputs/formation-kit/           当前四车任务控制程序与现场任务记录
+│   ├── work/                            部署、诊断、定位、安装与验收工具
+│   ├── docs/                            代码索引 / 验收状态 / 测试结果 / 移交说明
+│   └── 作品说明.md                      该作品的完整说明（简介 / 运行方式 / 验收结果）
+│
+└── logs/                                AI Coding 日志目录（现状见 logs/README.md）
 ```
 
-### 各目录为什么放这里
+**各目录为什么这样放**
 
-| 目录 | 形态 | 进 openvela 编译？ | 理由 |
+| 目录 | 形态 | 进 openvela 编译？ | 说明 |
 |---|---|---|---|
-| `quickapp/velaguard-inspection/` | **快应用**（三种官方形态之一） | **是**，由本仓 xml 的 `<linkfile>` 映射到 `packages/apps/contest2026_496_velaguard-inspection` | 这是本作品的参赛形态 |
+| `quickapp/velaguard-inspection/` | **快应用**（三种官方形态之一） | **是**，由本仓 manifest 的 `<linkfile>` 映射到 `packages/apps/contest2026_496_velaguard-inspection` | 本队主要作品的参赛形态 |
+| `app/vela_mecanum/` | **应用**（三种官方形态之一） | 否（其 `ai_agent` 需手工覆盖 `packages/ai_agent/`） | 同课题组第二件作品 |
 | `edge-dashboard/` | 配套边缘层工程 | 否 | 跑在 Ubuntu（X3M/M1）上，**不是** openvela 应用，不伪造形态 |
-| `app/vela_mecanum/` | **应用**（三种官方形态之一） | 否（需手工覆盖 `packages/ai_agent/`） | 同课题组另一件作品：四车自主编队。说明见 `app/vela_mecanum/作品说明.md` |
 | `logs/` | AI Coding 日志 | 否 | 官方约定路径 |
 
 ---
 
 ## 四、运行方式
 
-### 1. 拉取完整工程
+> 目标：评委照着本节可以一步步复现。
+
+### 4.1 拉取完整工程
 
 ```bash
 repo init -u https://github.com/open-vela/contest2026_496_diaochabingtuan \
@@ -112,59 +155,131 @@ repo init -u https://github.com/open-vela/contest2026_496_diaochabingtuan \
 repo sync -c -j8
 ```
 
-同步后本仓位于工作区 `contest2026_496_diaochabingtuan/`，openvela 全量源码在外层；
-`quickapp/velaguard-inspection/` 已软链为 `packages/apps/contest2026_496_velaguard-inspection/`。
+同步后本仓位于工作区 `contest2026_496_diaochabingtuan/`，openvela 全量源码在外层
+（`nuttx/`、`apps/`、`packages/`、`vendor/` 等）；
+`quickapp/velaguard-inspection/` 已被软链为 `packages/apps/contest2026_496_velaguard-inspection/`。
 
-### 2. 快应用：本机零依赖跑测试与打包（不需要 openvela 工程）
+### 4.2 快应用：本机零依赖跑测试与打包（**不需要 openvela 工程**）
+
+只需 Node.js ≥ 18，无第三方依赖、不用 `npm install`：
 
 ```bash
 cd contest2026_496_diaochabingtuan/quickapp/velaguard-inspection
 
-node tools/preview-server.js   # 浏览器预览 → http://127.0.0.1:8177
-node tools/run-tests.js        # 七步测试与自检
+node tools/preview-server.js   # 浏览器打开 http://127.0.0.1:8177 看界面（改完 src/ 刷新即可）
+node tools/run-tests.js        # 七步测试与自检，应全部通过、exit 0
 node tools/build-openvela.js   # 生成 build/openvela-app/{app.ux, manifest.json}
 ```
 
-### 3. 编译 openvela 并运行到 Vela Emulator
+### 4.3 编译 openvela 并运行到 Vela Emulator
 
 ```bash
-cd ..    # 进入 openvela 工作区根目录
+cd ..    # 回到 openvela 工作区根目录
 
 ./build.sh vendor/openvela/boards/vela/configs/goldfish-arm64-v8a-ap/ --cmake -j$(nproc)
 ./emulator.sh cmake_out/vela_goldfish-arm64-v8a-ap/
-# → goldfish-armv8a-ap> 提示符
+# 看到 goldfish-armv8a-ap> 提示符即启动成功
 ```
 
-> 端侧 AI 对话另需为固件补开 `CONFIG_EXAMPLES_AI_AGENT_VELA=y`、
-> `CONFIG_FEATURE_SYSTEM_VELACLAW=y`、`CONFIG_MQ_MAXMSGSIZE=4096`（默认 defconfig **不含**）。
+> **端侧 AI 对话需为固件补开以下配置**（官方默认 defconfig **不含**）：
+> `CONFIG_EXAMPLES_AI_AGENT_VELA=y`、`CONFIG_FEATURE_SYSTEM_VELACLAW=y`、
+> `CONFIG_MQ_MAXMSGSIZE=4096`（不足会**静默丢消息**）。详见 `quickapp/velaguard-inspection/docs/部署到openvela.md`。
 
-### 4. 部署快应用（arm64 模拟器）
+### 4.4 部署快应用与 Skill
 
 ```bash
-# adb 只能传文件；adb shell 在 arm64 模拟器上返回 error: closed，属正常
-adb -s emulator-5554 push quickapp/velaguard-inspection/dist-openvela /data/app/com.velaguard.inspection
+# 部署快应用（arm64 模拟器上 adb 只能传文件；adb shell 返回 error: closed 属正常现象）
+adb -s emulator-5554 push contest2026_496_diaochabingtuan/quickapp/velaguard-inspection/dist-openvela \
+    /data/app/com.velaguard.inspection
 
-# 在模拟器串口控制台输入：
+# 在模拟器串口控制台（不是 adb shell）输入：
 vapp hap://app/com.velaguard.inspection
 ```
 
-### 5. 部署自定义 Skill
-
 ```bash
-adb -s emulator-5554 push quickapp/velaguard-inspection/skills/inspection.md \
+# 部署自定义 Skill
+adb -s emulator-5554 push contest2026_496_diaochabingtuan/quickapp/velaguard-inspection/skills/inspection.md \
     /data/agent/skills/inspection.md
 ```
 
-### 6. 边缘层与真车联动
+> ⚠️ Skill 目录名先确认：openvela 源码里 `ai_agent` 的 Kconfig 默认是 `/data/ai_agent`，
+> 而官方大赛指引写 `/data/agent`，板级 defconfig 未覆盖该宏。**以设备上实际存在的目录为准**。
+> 模拟器还需先推中文字体到 `/data/font/`，否则中文全是方块。
 
-见 `edge-dashboard/README.md`（看板）与 `quickapp/velaguard-inspection/realcar/README.md`
-（车端执行器 `patrol_controller.py`、路线表、起停脚本、逐轮实测证据）。
+### 4.5 边缘层与真车联动（E5 触控屏演示形态）
+
+```bash
+ssh sunrise@192.168.1.104 "bash ~/velaguard/demo/run-demo.sh"      # 启动演示
+ssh sunrise@192.168.1.104 "bash ~/velaguard/demo/reset.sh"         # 复位（录制前必做）
+ssh sunrise@192.168.1.104 "bash ~/velaguard/demo/run-demo.sh --stop"
+```
+
+完整说明见 `quickapp/velaguard-inspection/device/README.md`；
+车端执行器 `patrol_controller.py`、路线表与逐轮实测证据见
+`quickapp/velaguard-inspection/realcar/`。
+
+### 4.6 第二件作品（VelaMecanum）的运行方式
+
+```powershell
+# Windows 本地仿真与自动测试
+cd app/vela_mecanum/outputs/formation-kit
+& .\run_formation.cmd square --spacing 0.5 --simulate
+& .\test_local.cmd
+```
+
+openvela QEMU 构建、Formation Lab 与四车现场任务见 `app/vela_mecanum/作品说明.md`。
+
+### 4.7 复现清单（照着打勾即可）
+
+| # | 步骤 | 期望结果 | 依赖 |
+|---|---|---|---|
+| 1 | `node tools/run-tests.js` | 七步全绿，exit 0（169 项断言） | 仅需 Node.js ≥ 18 |
+| 2 | `node tools/build-openvela.js` | 生成 `app.ux`（约 134 KB）+ `manifest.json` | 同上 |
+| 3 | `node tools/gen-waypoints.js --check` | 四条固定路线合规（每步 ≤ 0.90 m，总长 10.30 m） | 同上 |
+| 4 | `./build.sh … && ./emulator.sh …` | 出现 `goldfish-armv8a-ap>` 提示符 | openvela 工作区 + Ubuntu 22.04 |
+| 5 | `adb push dist-openvela /data/app/<包名>` | 文件落到 `/data/app/com.velaguard.inspection/` | 模拟器已启动 |
+
+> 第 4、5 步的**实际运行结果**请对照下面第六节的「验证边界」——我们如实标注了哪些跑通、哪些没有。
 
 ---
 
-## 五、验证到什么程度（如实声明）
+## 五、AI Coding 使用说明
 
-**这一节请评委连字号一起读——我们把「验过的」和「没验过的」分开写。**
+### 5.1 在哪些环节借助了 AI
+
+| 环节 | AI 参与方式 |
+|---|---|
+| 需求拆解与方案论证 | 用 AI 交叉核对赛题条款与官方文档，收敛出「主动 + 执行」的核心定位；对多个候选方案做可行性比对 |
+| openvela 平台边界确认 | 让 AI 读官方源码与文档，确认 Vela Emulator 的外设边界、快应用运行时能力、`@system.velaclaw` 的真实通道与限制（例如：**没有** `@system.websocket` 模块、Agent 侧的工具桥是返回 `not_implemented` 的桩） |
+| 编码 | 快应用七视图、状态机、模板引擎、打包器与全部测试用例，大部分由 AI 生成后人工审查、修改与实机验证 |
+| 调试 | 与 AI 一起定位设备侧语音链路、隧道、代理、唤醒词误触发等问题；AI 负责读日志、提假设、写复现脚本 |
+| 文档与材料 | 部署文档、命令单、演示执行单、技术报告素材由 AI 起草后人工校订 |
+
+### 5.2 AI 带来的实际帮助
+
+- **平台调研时间大幅压缩**：openvela 的构建目标、快应用运行时、端侧 Agent 通道等边界，
+  由 AI 直接读竞赛分支源码给出结论，替代了原本需要数天的资料检索与试错。
+- **可重复的验收流程**：AI 协助把「检查」固化成脚本（`tools/` 下 20 个），
+  包括 169 项断言的测试集与产物自检，使改动后能一键回归。
+- **口径一致性**：AI 在多轮对话中持续比对「材料声称」与「实机实测」，
+  促成了本 README 第六节那份「验过的 / 没验过的」分列声明。
+
+### 5.3 完整对话日志
+
+见 [`logs/`](logs/README.md)。
+
+> **如实声明**：本作品开发全程主要使用 **Codex**，另有部分工作使用其他工具。
+> 由于官方采集器 `contest-log-collector` v1.3.0 的 `--tool codex` 通道经对照实验实测**产出 0 事件**
+> （其唯一事件展开器只实现 Claude Code 的 transcript 结构），且原始 rollout 不符官方目录与命名格式，
+> 本仓 `logs/` **未提交日志文件**。完整原因、实测依据与原始记录的存放位置，见 [`logs/README.md`](logs/README.md)。
+> 我们**没有**手工拼装成官方格式——官方 `validate-log.py` 依据 `seq` 递增序号校验完整性，
+> 手工拼装存在被判篡改的风险。
+
+---
+
+## 六、验证边界（如实声明）
+
+> 这一节请连字号一起读——我们把「验过的」和「没验过的」分开写，不把计划说成已完成。
 
 ### ✅ 已实测通过
 
@@ -182,25 +297,13 @@ adb -s emulator-5554 push quickapp/velaguard-inspection/skills/inspection.md \
 |---|---|
 | **在 openvela 模拟器上实际运行** | ⛔ **已尝试并定位到上游缺陷**：`vapp hap://app/<包名>` 触发 QuickApp 运行时的**递归断言并复位板子**，**官方自带 demo 同样崩溃**，故非本应用问题 |
 | 官方 `release.rpk` | **未产出**。官方手册要求用 **AIoT-IDE** 图形化打包并生成签名，本队未走这条链路；`dist-openvela/` 是本仓构建脚本的产物，**不是**官方签名包 |
-| `@system.velaclaw` 真通道 | 只在预览里验过**兜底路径**（本地指令表），与端侧 Agent 的真通道未接通 |
+| `@system.velaclaw` 真通道 | 只在浏览器预览里验过**兜底路径**（本地指令表），与端侧 Agent 的真通道未接通 |
 | 中文字体 / 触摸事件 / LVGL 下的 SVG 渲染 | 只有静态自检，真机未验 |
 
-> **因此：本作品当前的现场演示形态是「E5 触控屏 + U2P(Ubuntu 20.04) + Firefox 全屏」，
-> 不是 openvela 系统。我们不在任何材料里把它描述成「已在 openvela 上跑通」。**
-> 设备侧的 `device/` 与 `realcar/` 是**同一份应用代码换宿主外壳**，车辆数据两种模式
+> **因此：本作品当前的现场演示形态是「E5 触控屏 + U2P(Ubuntu 20.04) + Firefox 全屏」，不是 openvela 系统。
+> 我们不在任何材料里把它描述成「已在 openvela 上跑通」。**
+> `device/` 与 `realcar/` 是**同一份应用代码换宿主外壳**，车辆数据的两种模式
 > （内置模拟数据 / 真车实测）在界面上有明确标签区分。
-
----
-
-## 六、AI Coding 使用说明
-
-本作品在需求拆解、方案论证、代码编写、设备调试与文档撰写各环节均借助 AI 辅助完成。
-完整对话日志见 [`logs/`](logs/README.md)。
-
-- 本作品快应用源码、构建脚本、测试用例、Skill 与文档大部分由 AI 辅助生成、经人工审查与实机验证。
-- openvela 平台相关开发在另一台具备完整环境的机器上进行，其日志由对应成员各自导出后提交，
-  以保证 `logs/<github_login>/` 的归属正确。
-- 仓库内不含手工拼装的日志：官方 `validate-log.py` 会校验序号连续性，篡改会被判作弊。
 
 ---
 
