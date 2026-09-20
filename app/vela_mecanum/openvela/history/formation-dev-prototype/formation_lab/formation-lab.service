@@ -1,0 +1,17 @@
+[Unit]
+Description=openvela Local Four-Robot Formation Lab
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vela
+Group=vela
+WorkingDirectory=/home/vela/formation-lab
+Environment=PYTHONPATH=/home/vela/formation-lab
+ExecStart=/usr/bin/python3 -m formation_lab.server --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

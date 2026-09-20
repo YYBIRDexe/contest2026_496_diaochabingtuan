@@ -1,0 +1,102 @@
+{
+  "stamp": "20260918-222813",
+  "expected_sha256": "5c63cd9a1114efd3b0cd76c7d5f7372de5ce2891789550ec19d789fa51ae3181",
+  "robots": {
+    "robot1": {
+      "backup": "/opt/openvela-formation/backups/agent-ratefix-20260918-222813",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'from rclpy.signals import SignalHandlerOptions; assert hasattr(SignalHandlerOptions, \"NO\"); print(\"signal_api_ok\")'; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; else echo no_lease; fi",
+          "exit": 0,
+          "stdout": "no_lease\n",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'rclpy'\n"
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/agent-ratefix-20260918-222813; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/agent-ratefix-20260918-222813/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot1.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot1.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot1$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot1.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot1.service --since '-2 minutes' --no-pager --output=cat | tail -n 30",
+          "exit": 0,
+          "stdout": "5c63cd9a1114efd3b0cd76c7d5f7372de5ce2891789550ec19d789fa51ae3181  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=74798\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1...\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 143, in main\n    \"safe\": safe, \"reason\": reason, \"timestamp_s\": time.time()}, separators=(\",\", \":\"))\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py\", line 222, in spin\n    executor.spin_once()\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 739, in spin_once\n    self._spin_once_impl(timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 728, in _spin_once_impl\n    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 711, in wait_for_ready_callbacks\n    return next(self._cb_iter)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 608, in _wait_for_ready_callbacks\n    wait_set.wait(timeout_nsec)\nKeyboardInterrupt\nDuring handling of the above exception, another exception occurred:\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 153, in <module>\n    def request_stop(_signum, _frame):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 146, in main\n    last_published_stop = stopped\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py\", line 70, in publish\n    self.__publisher.publish(msg)\nrclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389\nformation-agent@robot1.service: Main process exited, code=exited, status=1/FAILURE\nformation-agent@robot1.service: Failed with result 'exit-code'.\nStopped formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\nStarting formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1...\nStarted formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot2": {
+      "backup": "/opt/openvela-formation/backups/agent-ratefix-20260918-222813",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'from rclpy.signals import SignalHandlerOptions; assert hasattr(SignalHandlerOptions, \"NO\"); print(\"signal_api_ok\")'; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; else echo no_lease; fi",
+          "exit": 0,
+          "stdout": "no_lease\n",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'rclpy'\n"
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/agent-ratefix-20260918-222813; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/agent-ratefix-20260918-222813/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot2.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot2.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot2$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot2.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot2.service --since '-2 minutes' --no-pager --output=cat | tail -n 30",
+          "exit": 0,
+          "stdout": "5c63cd9a1114efd3b0cd76c7d5f7372de5ce2891789550ec19d789fa51ae3181  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=7511\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2...\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 143, in main\n    \"safe\": safe, \"reason\": reason, \"timestamp_s\": time.time()}, separators=(\",\", \":\"))\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py\", line 222, in spin\n    executor.spin_once()\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 739, in spin_once\n    self._spin_once_impl(timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 728, in _spin_once_impl\n    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 711, in wait_for_ready_callbacks\n    return next(self._cb_iter)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 608, in _wait_for_ready_callbacks\n    wait_set.wait(timeout_nsec)\nKeyboardInterrupt\nDuring handling of the above exception, another exception occurred:\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 153, in <module>\n    def request_stop(_signum, _frame):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 146, in main\n    last_published_stop = stopped\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py\", line 70, in publish\n    self.__publisher.publish(msg)\nrclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389\nformation-agent@robot2.service: Main process exited, code=exited, status=1/FAILURE\nformation-agent@robot2.service: Failed with result 'exit-code'.\nStopped formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\nStarting formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2...\nStarted formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot3": {
+      "backup": "/opt/openvela-formation/backups/agent-ratefix-20260918-222813",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'from rclpy.signals import SignalHandlerOptions; assert hasattr(SignalHandlerOptions, \"NO\"); print(\"signal_api_ok\")'; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; else echo no_lease; fi",
+          "exit": 0,
+          "stdout": "no_lease\n",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'rclpy'\n"
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/agent-ratefix-20260918-222813; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/agent-ratefix-20260918-222813/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot3.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot3.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot3$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot3.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot3.service --since '-2 minutes' --no-pager --output=cat | tail -n 30",
+          "exit": 0,
+          "stdout": "5c63cd9a1114efd3b0cd76c7d5f7372de5ce2891789550ec19d789fa51ae3181  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=9786\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3...\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 143, in main\n    \"safe\": safe, \"reason\": reason, \"timestamp_s\": time.time()}, separators=(\",\", \":\"))\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py\", line 222, in spin\n    executor.spin_once()\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 739, in spin_once\n    self._spin_once_impl(timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 728, in _spin_once_impl\n    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 711, in wait_for_ready_callbacks\n    return next(self._cb_iter)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 608, in _wait_for_ready_callbacks\n    wait_set.wait(timeout_nsec)\nKeyboardInterrupt\nDuring handling of the above exception, another exception occurred:\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 153, in <module>\n    def request_stop(_signum, _frame):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 146, in main\n    last_published_stop = stopped\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py\", line 70, in publish\n    self.__publisher.publish(msg)\nrclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389\nformation-agent@robot3.service: Main process exited, code=exited, status=1/FAILURE\nformation-agent@robot3.service: Failed with result 'exit-code'.\nStopped formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3.\nStarting formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3...\nStarted formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot4": {
+      "backup": "/opt/openvela-formation/backups/agent-ratefix-20260918-222813",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'from rclpy.signals import SignalHandlerOptions; assert hasattr(SignalHandlerOptions, \"NO\"); print(\"signal_api_ok\")'; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; else echo no_lease; fi",
+          "exit": 0,
+          "stdout": "no_lease\n",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'rclpy'\n"
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/agent-ratefix-20260918-222813; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/agent-ratefix-20260918-222813/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot4.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot4.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot4$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot4.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot4.service --since '-2 minutes' --no-pager --output=cat | tail -n 30",
+          "exit": 0,
+          "stdout": "5c63cd9a1114efd3b0cd76c7d5f7372de5ce2891789550ec19d789fa51ae3181  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=76912\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4...\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 143, in main\n    \"safe\": safe, \"reason\": reason, \"timestamp_s\": time.time()}, separators=(\",\", \":\"))\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py\", line 222, in spin\n    executor.spin_once()\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 739, in spin_once\n    self._spin_once_impl(timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 728, in _spin_once_impl\n    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 711, in wait_for_ready_callbacks\n    return next(self._cb_iter)\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py\", line 608, in _wait_for_ready_callbacks\n    wait_set.wait(timeout_nsec)\nKeyboardInterrupt\nDuring handling of the above exception, another exception occurred:\nTraceback (most recent call last):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 153, in <module>\n    def request_stop(_signum, _frame):\n  File \"/opt/openvela-formation/formation_lab/reconfiguration_agent.py\", line 146, in main\n    last_published_stop = stopped\n  File \"/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py\", line 70, in publish\n    self.__publisher.publish(msg)\nrclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389\nformation-agent@robot4.service: Main process exited, code=exited, status=1/FAILURE\nformation-agent@robot4.service: Failed with result 'exit-code'.\nStopped formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4.\nStarting formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4...\nStarted formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    }
+  }
+}

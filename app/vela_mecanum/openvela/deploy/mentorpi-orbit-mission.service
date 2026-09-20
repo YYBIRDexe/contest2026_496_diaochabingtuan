@@ -1,0 +1,14 @@
+[Unit]
+Description=MentorPi one-shot lidar-hold orbit mission
+After=docker.service start_node.service
+Requires=docker.service start_node.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openvela-formation/scripts/run_orbit_mission.sh 1.0 0.70
+ExecStopPost=/opt/openvela-formation/scripts/stop_orbit_mission.sh
+TimeoutStartSec=300
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

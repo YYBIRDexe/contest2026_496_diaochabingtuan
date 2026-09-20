@@ -1,0 +1,27 @@
+{
+  "identity": {
+    "stdout": "robot3\n2026-09-18T05:27:00+08:00\n 05:27:00 up 2 min,  2 users,  load average: 2.09, 1.31, 0.53\nMentorPi Up About a minute\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "services": {
+    "stdout": "active\nactive\ninactive\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "files": {
+    "stdout": "682481b5dc93736191753edaee357650c3340322ebfd1a938ee766df47a9b76b  /opt/openvela-formation/formation_lab/formation_planner.py\necff100b3fa65129388e78dc0b0af34eea2d646b14058931c59c2f499986e42a  /opt/openvela-formation/formation_lab/reconfiguration_session.py\n0832f5e85c64257e37152d1f9da1d86c086c4714e9d8f646fc46238b2ff88848  /opt/openvela-formation/formation_lab/reconfiguration_ros.py\n8be0660b605f5d2b0a26900d64268db2fe1faca4f92a440617312182d2469514  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\n920146f0015b03a4eeb677e4852000726ed9fd8e15970b644caf1b74265f809b  /opt/openvela-formation/formation_lab/mentorpi_agent.py\nc084e2da77fd1eba1c9d08d8c2f9f10eab7a10a6cf16ac2a66ed172ca72d2dc9  /opt/openvela-formation/formation_lab/command_bridge.py\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "processes": {
+    "stdout": "    746 python3 command_bridge.py --robot robot3 --local-domain 3 --fleet-domain 42\n   1402 python3 /opt/openvela-formation/formation_lab/reconfiguration_agent.py --robot-id robot3\n   2060 /opt/ros/humble/lib/nav2_map_server/map_server --ros-args -r __node:=map_server -r __ns:=/ --params-file /tmp/launch_params_nwuahpwa\n   2062 /opt/ros/humble/lib/nav2_amcl/amcl --ros-args -r __node:=amcl -r __ns:=/ --params-file /home/ubuntu/ros2_ws/install/mentorpi_formation_bringup/share/mentorpi_formation_bringup/config/amcl.yaml --params-file /tmp/launch_params_t9wlq3_8 -r map:=map -r scan:=scan_raw\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "ntp": {
+    "stdout": "Timezone=Asia/Hong_Kong\nNTP=yes\nNTPSynchronized=yes\ninactive\n",
+    "stderr": "",
+    "exit": 0
+  }
+}

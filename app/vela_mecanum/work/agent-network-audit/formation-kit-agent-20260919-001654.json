@@ -1,0 +1,78 @@
+{
+  "stamp": "20260919-001654",
+  "expected_sha256": "37c787fc7b0cf67eb8eb6e8f8c27d239bb564168f6e98831175aa3e12c5e044f",
+  "robots": {
+    "robot1": {
+      "backup": "/opt/openvela-formation/backups/formation-kit-agent-20260919-001654",
+      "steps": [
+        {
+          "command": "if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; fi; sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-kit-agent-20260919-001654; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/formation-kit-agent-20260919-001654/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot1.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot1.service)\" = active; test \"$(systemctl is-active formation-command-bridge@robot1.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot1$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot1.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot1.service --since '-90 seconds' --no-pager --output=cat | tail -n 20",
+          "exit": 0,
+          "stdout": "37c787fc7b0cf67eb8eb6e8f8c27d239bb564168f6e98831175aa3e12c5e044f  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=124946\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1...\nformation-agent@robot1.service: Deactivated successfully.\nStopped formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\nStarting formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1...\nStarted formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot2": {
+      "backup": "/opt/openvela-formation/backups/formation-kit-agent-20260919-001654",
+      "steps": [
+        {
+          "command": "if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; fi; sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-kit-agent-20260919-001654; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/formation-kit-agent-20260919-001654/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot2.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot2.service)\" = active; test \"$(systemctl is-active formation-command-bridge@robot2.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot2$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot2.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot2.service --since '-90 seconds' --no-pager --output=cat | tail -n 20",
+          "exit": 0,
+          "stdout": "37c787fc7b0cf67eb8eb6e8f8c27d239bb564168f6e98831175aa3e12c5e044f  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=124933\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2...\nformation-agent@robot2.service: Deactivated successfully.\nStopped formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\nStarting formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2...\nStarted formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot3": {
+      "backup": "/opt/openvela-formation/backups/formation-kit-agent-20260919-001654",
+      "steps": [
+        {
+          "command": "if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; fi; sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-kit-agent-20260919-001654; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/formation-kit-agent-20260919-001654/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot3.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot3.service)\" = active; test \"$(systemctl is-active formation-command-bridge@robot3.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot3$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot3.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot3.service --since '-90 seconds' --no-pager --output=cat | tail -n 20",
+          "exit": 0,
+          "stdout": "37c787fc7b0cf67eb8eb6e8f8c27d239bb564168f6e98831175aa3e12c5e044f  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=11081\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStopping formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3...\nformation-agent@robot3.service: Deactivated successfully.\nStopped formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3.\nStarting formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3...\nStarted formation-agent@robot3.service - Distributed CZ225 MentorPi formation agent for robot3.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot4": {
+      "backup": "/opt/openvela-formation/backups/formation-kit-agent-20260919-001654",
+      "steps": [
+        {
+          "command": "if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 40; fi; sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-kit-agent-20260919-001654; sudo -n cp -a /opt/openvela-formation/formation_lab/reconfiguration_agent.py /opt/openvela-formation/backups/formation-kit-agent-20260919-001654/reconfiguration_agent.py; sudo -n docker cp /tmp/reconfiguration_agent.py MentorPi:/tmp/reconfiguration_agent.py; rm -f /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi python3 -m py_compile /tmp/reconfiguration_agent.py; sudo -n docker exec MentorPi install -o ubuntu -g ubuntu -m 0644 /tmp/reconfiguration_agent.py /opt/openvela-formation/formation_lab/reconfiguration_agent.py; sudo -n docker exec MentorPi rm -f /tmp/reconfiguration_agent.py; sudo -n systemctl restart formation-agent@robot4.service",
+          "exit": 0,
+          "stdout": "",
+          "stderr": "cp: cannot stat '/opt/openvela-formation/formation_lab/reconfiguration_agent.py': No such file or directory\n"
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot4.service)\" = active; test \"$(systemctl is-active formation-command-bridge@robot4.service)\" = active; test \"$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot4$')\" -eq 1; docker exec MentorPi sha256sum /opt/openvela-formation/formation_lab/reconfiguration_agent.py; systemctl show formation-agent@robot4.service -p ActiveState -p SubState -p MainPID -p Result -p NRestarts; if docker exec MentorPi test -e /run/openvela-formation/command-arm.json; then exit 41; else echo no_lease; fi; journalctl -u formation-agent@robot4.service --since '-90 seconds' --no-pager --output=cat | tail -n 20",
+          "exit": 0,
+          "stdout": "37c787fc7b0cf67eb8eb6e8f8c27d239bb564168f6e98831175aa3e12c5e044f  /opt/openvela-formation/formation_lab/reconfiguration_agent.py\nMainPID=3350\nResult=success\nNRestarts=0\nActiveState=active\nSubState=running\nno_lease\nStarting formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4...\nStarted formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4.\nStopping formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4...\nformation-agent@robot4.service: Deactivated successfully.\nStopped formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4.\nStarting formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4...\nStarted formation-agent@robot4.service - Distributed CZ225 MentorPi formation agent for robot4.\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    }
+  }
+}

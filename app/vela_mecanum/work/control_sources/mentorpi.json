@@ -1,0 +1,48 @@
+{
+  "platform": "Hiwonder MentorPi Raspberry Pi 5 mecanum",
+  "hardware_output_enabled": false,
+  "control_mode": "anchored",
+  "consensus_graph": {
+    "name": "ring_virtual_leader",
+    "edges": [["robot1", "robot2"], ["robot2", "robot3"], ["robot3", "robot4"], ["robot4", "robot1"]],
+    "pinning": {"robot1": 1.0}
+  },
+  "frame_convention": "ROS REP-103: x forward, y left, yaw counter-clockwise",
+  "mission_topic": "/formation/mission",
+  "mission_ack_topic": "/formation/mission_ack",
+  "agent_status_topic": "/formation/agent_status",
+  "mission_protocol": {
+    "max_duration_s": 30.0,
+    "min_deadline_lead_s": 0.5,
+    "prepare_timeout_s": 5.0,
+    "state_path": "/opt/openvela-formation/state/{robot_id}-mission-state.json"
+  },
+  "control_hz": 20.0,
+  "peer_timeout_s": 0.7,
+  "odom_timeout_s": 0.5,
+  "shared_map_frame": "map",
+  "max_xy_variance_m2": 0.25,
+  "max_yaw_variance_rad2": 0.25,
+  "lidar_guard": {
+    "enabled": true,
+    "scan_timeout_s": 0.5,
+    "stop_distance_m": 0.4,
+    "slow_distance_m": 0.8,
+    "sector_half_angle_deg": 30.0,
+    "rotation_stop_distance_m": 0.3
+  },
+  "localization_requirement": "Every pose_topic must be AMCL PoseWithCovarianceStamped in the shared map frame; odom_topic supplies only body velocity",
+  "limits": {
+    "max_linear_mps": 0.65,
+    "max_angular_radps": 1.5,
+    "arena_half_extent_m": 3.0,
+    "min_distance_m": 0.25,
+    "max_initial_target_distance_m": 0.4
+  },
+  "robots": {
+    "robot1": {"cmd_vel_topic": "/robot1/controller/cmd_vel", "odom_topic": "/robot1/odom", "pose_topic": "/robot1/amcl_pose", "scan_topic": "/robot1/scan_raw"},
+    "robot2": {"cmd_vel_topic": "/robot2/controller/cmd_vel", "odom_topic": "/robot2/odom", "pose_topic": "/robot2/amcl_pose", "scan_topic": "/robot2/scan_raw"},
+    "robot3": {"cmd_vel_topic": "/robot3/controller/cmd_vel", "odom_topic": "/robot3/odom", "pose_topic": "/robot3/amcl_pose", "scan_topic": "/robot3/scan_raw"},
+    "robot4": {"cmd_vel_topic": "/robot4/controller/cmd_vel", "odom_topic": "/robot4/odom", "pose_topic": "/robot4/amcl_pose", "scan_topic": "/robot4/scan_raw"}
+  }
+}

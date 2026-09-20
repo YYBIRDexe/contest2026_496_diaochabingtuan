@@ -1,0 +1,14 @@
+[Unit]
+Description=MentorPi one-shot lidar/SLAM guarded distance mission
+After=docker.service start_node.service
+Requires=docker.service start_node.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openvela-formation/scripts/run_distance_mission.sh 1.0
+ExecStopPost=/opt/openvela-formation/scripts/stop_distance_mission.sh
+TimeoutStartSec=100
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

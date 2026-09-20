@@ -1,0 +1,113 @@
+{
+  "stamp": "20260918-215510",
+  "robots": {
+    "robot1": {
+      "backup": "/opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; assert not (d and time.monotonic()<float(d.get(\"expires_mono\",0))), \"valid motor lease exists\"; print(\"no valid motor lease\")'",
+          "exit": 0,
+          "elapsed_s": 1.266,
+          "stdout": "no valid motor lease\n",
+          "stderr": ""
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts; sudo -n cp -a /etc/systemd/system/formation-agent@.service /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system/; if test -e /opt/openvela-formation/scripts/stop_formation_agent.sh; then sudo -n cp -a /opt/openvela-formation/scripts/stop_formation_agent.sh /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts/; fi; sudo -n install -o root -g root -m 0755 /tmp/stop_formation_agent.sh /opt/openvela-formation/scripts/stop_formation_agent.sh; sudo -n install -o root -g root -m 0644 /tmp/formation-agent@.service /etc/systemd/system/formation-agent@.service; rm -f /tmp/stop_formation_agent.sh /tmp/formation-agent@.service; sudo -n systemctl daemon-reload; sudo -n systemctl restart formation-agent@robot1.service",
+          "exit": 0,
+          "elapsed_s": 0.657,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot1.service)\" = active; count=$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot1$'); test \"$count\" -eq 1; echo agent_count=$count; sha256sum /opt/openvela-formation/scripts/stop_formation_agent.sh /etc/systemd/system/formation-agent@.service; systemctl show formation-agent@robot1.service -p ActiveState -p SubState -p MainPID -p Result; docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; print(\"lease_present\",p.exists(),\"lease_valid\",bool(d and time.monotonic()<float(d.get(\"expires_mono\",0))))'",
+          "exit": 0,
+          "elapsed_s": 1.218,
+          "stdout": "agent_count=2\n2f2ec58e842df1c69fd2266d86c1f929d6dff915614e991558b8ef625f5b9782  /opt/openvela-formation/scripts/stop_formation_agent.sh\n725f5e90bdd6bcffaa6844b6020c56faab45e64a78a2f9e02c9e702e5e72390b  /etc/systemd/system/formation-agent@.service\nMainPID=51834\nResult=success\nActiveState=active\nSubState=running\nlease_present False lease_valid False\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot2": {
+      "backup": "/opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; assert not (d and time.monotonic()<float(d.get(\"expires_mono\",0))), \"valid motor lease exists\"; print(\"no valid motor lease\")'",
+          "exit": 0,
+          "elapsed_s": 0.453,
+          "stdout": "no valid motor lease\n",
+          "stderr": ""
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts; sudo -n cp -a /etc/systemd/system/formation-agent@.service /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system/; if test -e /opt/openvela-formation/scripts/stop_formation_agent.sh; then sudo -n cp -a /opt/openvela-formation/scripts/stop_formation_agent.sh /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts/; fi; sudo -n install -o root -g root -m 0755 /tmp/stop_formation_agent.sh /opt/openvela-formation/scripts/stop_formation_agent.sh; sudo -n install -o root -g root -m 0644 /tmp/formation-agent@.service /etc/systemd/system/formation-agent@.service; rm -f /tmp/stop_formation_agent.sh /tmp/formation-agent@.service; sudo -n systemctl daemon-reload; sudo -n systemctl restart formation-agent@robot2.service",
+          "exit": 0,
+          "elapsed_s": 0.828,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot2.service)\" = active; count=$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot2$'); test \"$count\" -eq 1; echo agent_count=$count; sha256sum /opt/openvela-formation/scripts/stop_formation_agent.sh /etc/systemd/system/formation-agent@.service; systemctl show formation-agent@robot2.service -p ActiveState -p SubState -p MainPID -p Result; docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; print(\"lease_present\",p.exists(),\"lease_valid\",bool(d and time.monotonic()<float(d.get(\"expires_mono\",0))))'",
+          "exit": 0,
+          "elapsed_s": 2.328,
+          "stdout": "agent_count=2\n2f2ec58e842df1c69fd2266d86c1f929d6dff915614e991558b8ef625f5b9782  /opt/openvela-formation/scripts/stop_formation_agent.sh\n725f5e90bdd6bcffaa6844b6020c56faab45e64a78a2f9e02c9e702e5e72390b  /etc/systemd/system/formation-agent@.service\nMainPID=51129\nResult=success\nActiveState=active\nSubState=running\nlease_present False lease_valid False\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot3": {
+      "backup": "/opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; assert not (d and time.monotonic()<float(d.get(\"expires_mono\",0))), \"valid motor lease exists\"; print(\"no valid motor lease\")'",
+          "exit": 0,
+          "elapsed_s": 0.281,
+          "stdout": "no valid motor lease\n",
+          "stderr": ""
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts; sudo -n cp -a /etc/systemd/system/formation-agent@.service /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system/; if test -e /opt/openvela-formation/scripts/stop_formation_agent.sh; then sudo -n cp -a /opt/openvela-formation/scripts/stop_formation_agent.sh /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts/; fi; sudo -n install -o root -g root -m 0755 /tmp/stop_formation_agent.sh /opt/openvela-formation/scripts/stop_formation_agent.sh; sudo -n install -o root -g root -m 0644 /tmp/formation-agent@.service /etc/systemd/system/formation-agent@.service; rm -f /tmp/stop_formation_agent.sh /tmp/formation-agent@.service; sudo -n systemctl daemon-reload; sudo -n systemctl restart formation-agent@robot3.service",
+          "exit": 0,
+          "elapsed_s": 0.969,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot3.service)\" = active; count=$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot3$'); test \"$count\" -eq 1; echo agent_count=$count; sha256sum /opt/openvela-formation/scripts/stop_formation_agent.sh /etc/systemd/system/formation-agent@.service; systemctl show formation-agent@robot3.service -p ActiveState -p SubState -p MainPID -p Result; docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; print(\"lease_present\",p.exists(),\"lease_valid\",bool(d and time.monotonic()<float(d.get(\"expires_mono\",0))))'",
+          "exit": 0,
+          "elapsed_s": 0.328,
+          "stdout": "agent_count=2\n2f2ec58e842df1c69fd2266d86c1f929d6dff915614e991558b8ef625f5b9782  /opt/openvela-formation/scripts/stop_formation_agent.sh\n725f5e90bdd6bcffaa6844b6020c56faab45e64a78a2f9e02c9e702e5e72390b  /etc/systemd/system/formation-agent@.service\nMainPID=56622\nResult=success\nActiveState=active\nSubState=running\nlease_present False lease_valid False\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    },
+    "robot4": {
+      "backup": "/opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510",
+      "steps": [
+        {
+          "command": "docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; assert not (d and time.monotonic()<float(d.get(\"expires_mono\",0))), \"valid motor lease exists\"; print(\"no valid motor lease\")'",
+          "exit": 0,
+          "elapsed_s": 2.234,
+          "stdout": "no valid motor lease\n",
+          "stderr": ""
+        },
+        {
+          "command": "sudo -n install -d -m 0755 /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts; sudo -n cp -a /etc/systemd/system/formation-agent@.service /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/etc/systemd/system/; if test -e /opt/openvela-formation/scripts/stop_formation_agent.sh; then sudo -n cp -a /opt/openvela-formation/scripts/stop_formation_agent.sh /opt/openvela-formation/backups/formation-agent-stopfix-20260918-215510/opt/openvela-formation/scripts/; fi; sudo -n install -o root -g root -m 0755 /tmp/stop_formation_agent.sh /opt/openvela-formation/scripts/stop_formation_agent.sh; sudo -n install -o root -g root -m 0644 /tmp/formation-agent@.service /etc/systemd/system/formation-agent@.service; rm -f /tmp/stop_formation_agent.sh /tmp/formation-agent@.service; sudo -n systemctl daemon-reload; sudo -n systemctl restart formation-agent@robot4.service",
+          "exit": 0,
+          "elapsed_s": 2.032,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "command": "test \"$(systemctl is-active formation-agent@robot4.service)\" = active; count=$(docker exec MentorPi pgrep -fc '^python3 /opt/openvela-formation/formation_lab/reconfiguration_agent[.]py --robot-id robot4$'); test \"$count\" -eq 1; echo agent_count=$count; sha256sum /opt/openvela-formation/scripts/stop_formation_agent.sh /etc/systemd/system/formation-agent@.service; systemctl show formation-agent@robot4.service -p ActiveState -p SubState -p MainPID -p Result; docker exec MentorPi python3 -c 'import json,pathlib,time; p=pathlib.Path(\"/run/openvela-formation/command-arm.json\"); d=json.loads(p.read_text()) if p.exists() else {}; print(\"lease_present\",p.exists(),\"lease_valid\",bool(d and time.monotonic()<float(d.get(\"expires_mono\",0))))'",
+          "exit": 0,
+          "elapsed_s": 3.375,
+          "stdout": "agent_count=2\n2f2ec58e842df1c69fd2266d86c1f929d6dff915614e991558b8ef625f5b9782  /opt/openvela-formation/scripts/stop_formation_agent.sh\n725f5e90bdd6bcffaa6844b6020c56faab45e64a78a2f9e02c9e702e5e72390b  /etc/systemd/system/formation-agent@.service\nMainPID=58620\nResult=success\nActiveState=active\nSubState=running\nlease_present False lease_valid False\n",
+          "stderr": ""
+        }
+      ],
+      "ok": true
+    }
+  }
+}

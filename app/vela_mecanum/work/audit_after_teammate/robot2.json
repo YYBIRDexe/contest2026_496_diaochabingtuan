@@ -1,0 +1,52 @@
+{
+  "time": {
+    "stdout": "2026-09-18T05:26:09+08:00\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "services": {
+    "stdout": "active\nactive\nactive\ninactive\ninactive\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "units": {
+    "stdout": "# /etc/systemd/system/formation-agent@.service\n[Unit]\nDescription=Distributed CZ225 MentorPi formation agent for %i\nAfter=network-online.target docker.service mentorpi-localization.service\nWants=network-online.target docker.service\n\n[Service]\nType=simple\nUser=root\nGroup=root\nEnvironmentFile=/etc/default/openvela-formation\nExecStart=/opt/openvela-formation/scripts/run_formation_agent.sh %i\nKillSignal=SIGINT\nTimeoutStopSec=8\nRestart=on-failure\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n\n\n# /etc/systemd/system/formation-command-bridge@.service\nNo files found for formation-reconfiguration.service.\n[Unit]\nDescription=Locked formation command bridge for %i\nRequires=docker.service start_node.service\nAfter=docker.service start_node.service\n\n[Service]\nType=simple\nUser=pi\nExecStart=/opt/openvela-formation/scripts/run_command_bridge.sh %i\nExecStopPost=/opt/openvela-formation/scripts/stop_command_bridge.sh %i\nRestart=always\nRestartSec=1\n\n[Install]\nWantedBy=multi-user.target\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "versions": {
+    "stdout": "7eb69055fbe46c50010a08aa59efa2299bca8fff9f76aa0d84768b75d9f7edd4  /opt/openvela-formation/config/mentorpi.json\n2026-09-17 15:15:02.354029776 +0000 /opt/openvela-formation/config/mentorpi.json\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "launchers": {
+    "stdout": "b0815a34193df92272e609a07488f79f7e877edfe670e3459322b8d53e7776e6  /opt/openvela-formation/scripts/run_formation_agent.sh\nsha256sum: /opt/openvela-formation/scripts/run_reconfiguration_coordinator.sh: No such file or directory\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "hardware": {
+    "stdout": "True\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "lease": {
+    "stdout": "present False valid False\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "processes": {
+    "stdout": "    403 /bin/bash -lc    source /opt/ros/humble/setup.bash   source /home/ubuntu/third_party_ros2/third_party_ws/install/setup.bash   source /home/ubuntu/ros2_ws/install/setup.bash   cd /opt/openvela-formation/formation_lab   exec python3 command_bridge.py \\     --robot robot2 \\     --local-domain 2 \\     --fleet-domain 42 \n    767 /bin/bash -lc      source /opt/ros/humble/setup.bash     source /home/ubuntu/third_party_ros2/third_party_ws/install/setup.bash     source /home/ubuntu/ros2_ws/install/setup.bash     exec python3 /opt/openvela-formation/formation_lab/reconfiguration_agent.py --robot-id robot2   \n",
+    "stderr": "",
+    "exit": 0
+  },
+  "agent_log": {
+    "stdout": "Started formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\nformation-agent@robot2.service: Main process exited, code=exited, status=137/n/a\nformation-agent@robot2.service: Failed with result 'exit-code'.\nformation-agent@robot2.service: Scheduled restart job, restart counter is at 1.\nStopped formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\nStarted formation-agent@robot2.service - Distributed CZ225 MentorPi formation agent for robot2.\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "bridge_log": {
+    "stdout": "Started formation-command-bridge@robot2.service - Locked formation command bridge for robot2.\nformation-command-bridge@robot2.service: Main process exited, code=exited, status=137/n/a\nformation-command-bridge@robot2.service: Failed with result 'exit-code'.\nformation-command-bridge@robot2.service: Scheduled restart job, restart counter is at 1.\nStopped formation-command-bridge@robot2.service - Locked formation command bridge for robot2.\nStarted formation-command-bridge@robot2.service - Locked formation command bridge for robot2.\ncommand bridge robot2: local=2 fleet=42 locked\n",
+    "stderr": "",
+    "exit": 0
+  }
+}

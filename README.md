@@ -81,6 +81,13 @@
 │       ├── dist-openvela/               部署产物 app.ux + manifest.json（生成物）
 │       └── docs/                        部署、命令单、地图与路线、拍摄执行单
 ├── edge-dashboard/                      边缘层工程（M1/U2P，Node + Python，不参与 openvela 编译）
+├── app/
+│   └── vela_mecanum/                    ★ 第二件作品：四车自主编队（应用形态）
+│       ├── openvela/                    openvela 端 ai_agent 改造 + Formation Lab + ROS 2 bringup
+│       ├── outputs/formation-kit/       当前四车任务控制程序与现场任务记录
+│       ├── work/                        部署、诊断、定位、安装与验收工具
+│       ├── docs/                        代码索引 / 验收状态 / 测试结果 / 移交说明
+│       └── 作品说明.md                  该作品的完整说明（简介 / 运行方式 / 验收结果）
 └── logs/                                AI Coding 日志，一人一目录
 ```
 
@@ -90,6 +97,7 @@
 |---|---|---|---|
 | `quickapp/velaguard-inspection/` | **快应用**（三种官方形态之一） | **是**，由本仓 xml 的 `<linkfile>` 映射到 `packages/apps/contest2026_496_velaguard-inspection` | 这是本作品的参赛形态 |
 | `edge-dashboard/` | 配套边缘层工程 | 否 | 跑在 Ubuntu（X3M/M1）上，**不是** openvela 应用，不伪造形态 |
+| `app/vela_mecanum/` | **应用**（三种官方形态之一） | 否（需手工覆盖 `packages/ai_agent/`） | 同课题组另一件作品：四车自主编队。说明见 `app/vela_mecanum/作品说明.md` |
 | `logs/` | AI Coding 日志 | 否 | 官方约定路径 |
 
 ---

@@ -1,0 +1,19 @@
+[Unit]
+Description=CZ225 MentorPi AMCL localization in the vendor ROS 2 container
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/default/openvela-formation
+ExecStart=/opt/openvela-formation/scripts/run_localization.sh
+KillSignal=SIGINT
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+
