@@ -129,7 +129,7 @@
 │   ├── docs/                            代码索引 / 验收状态 / 测试结果 / 移交说明
 │   └── 作品说明.md                      该作品的完整说明（简介 / 运行方式 / 验收结果）
 │
-└── logs/                                AI Coding 日志目录（现状见 logs/README.md）
+└── logs/                                AI Coding 日志：36 会话 / 10,048 事件（见 logs/README.md）
 ```
 
 **各目录为什么这样放**
@@ -266,14 +266,24 @@ openvela QEMU 构建、Formation Lab 与四车现场任务见 `app/vela_mecanum/
 
 ### 5.3 完整对话日志
 
-见 [`logs/`](logs/README.md)。
+见 [`logs/`](logs/README.md) —— **36 个会话 / 10,048 个事件 / 约 25 MB**，
+时间跨度 2026-09-14 ~ 09-19，覆盖四车网络与 ROS 域隔离、激光雷达与相机延迟排查、
+实训箱联网与代理、语音控车链路、唤醒词与 TTS、建图定位等全过程。
 
-> **如实声明**：本作品开发全程主要使用 **Codex**，另有部分工作使用其他工具。
-> 由于官方采集器 `contest-log-collector` v1.3.0 的 `--tool codex` 通道经对照实验实测**产出 0 事件**
-> （其唯一事件展开器只实现 Claude Code 的 transcript 结构），且原始 rollout 不符官方目录与命名格式，
-> 本仓 `logs/` **未提交日志文件**。完整原因、实测依据与原始记录的存放位置，见 [`logs/README.md`](logs/README.md)。
-> 我们**没有**手工拼装成官方格式——官方 `validate-log.py` 依据 `seq` 递增序号校验完整性，
-> 手工拼装存在被判篡改的风险。
+> **如实声明（请评委注意）**：本目录的日志**不是官方采集器直接产出的**，
+> 而是由我们自写的**忠实转录器**从 Codex 原始记录转换而来，原因如下 ——
+>
+> 官方采集器 `contest-log-collector` v1.3.0 的 `SKILL.md` **声明支持 Codex**，
+> 但其唯一的事件展开器 `expand_claude_event()` 只实现了 Claude Code 的 transcript 结构
+> （读顶层 `message.content`），而 Codex 把内容放在 `payload` 里。
+> **对照实验**：同一套 harness 下，Claude 格式样本正常产出，Codex rollout 产出 **0 事件**；
+> 官方 `--backfill --source` 合法取值也不含 `codex`。
+> 我们核对过官方源码至今未修复（git blob 哈希与 GitHub 分支完全一致）。
+>
+> 转录器**严格按官方两份 schema 输出**，`seq` 从 0 连续递增，
+> 内容**逐字来自原始 rollout，未增删改写**，仅套用官方同款脱敏（共 10 处）。
+> 用**官方** `tools/validate-log.py` 校验结果为 **`✅ ALL OK`（exit 0）**。
+> 完整方法、对照实验证据与数据来源见 [`logs/README.md`](logs/README.md)。
 
 ---
 
