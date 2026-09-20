@@ -1,0 +1,148 @@
+/*
+ * app.ux —— openvela 快应用入口
+ * ⚠️ 本文件由 tools/build-openvela.js 从 src/app.ux.tmpl 生成，**请不要直接改这个文件**。
+ *
+ * 结构说明：
+ *   1. 页面层用「单页 + 仓内路由」：六个视图由 app-shell.js 按状态切换，
+ *      **不依赖系统 router 模块**——官方 Feature Framework 的模块清单里
+ *      没有 router 的 JS 模块（只有 C 层的 ApplicationRoute），
+ *      照文档写 `import router from '@system.router'` 在模拟器上不一定能解析。
+ *   2. 脚本层内联打包产物：快应用不认 import 语句，所以所有模块以
+ *      __def / __mod 的形式自带进来（见 build/velaguard.bundle.js）。
+ *   3. `@system.velaclaw` 只能写在快应用自己的脚本里，因此在 bundle 内部完成取值，
+ *      本文件只负责把 ask() 包成 Promise 交给 agent.js。
+ *   4. 点击交互：快应用没有 DOM 事件代理，所以渲染时用 onclick 把节点与动作绑起来
+ *      （由 bundle 内的 bindActions 完成）。
+ */
+import velaclaw from '@system.velaclaw'
+
+/*
+ * 打包产物在最顶层求值一次，句柄挂成模块级常量。
+ *
+ * 为什么不在 boot() 的 try 里求值：那会变成**块级作用域**，
+ * 句柄出不了那个块，后面用不到（第一次生成时就是这么坏的，
+ * 而且因为 try 把错误吞了，表现为"启动失败"而不是语法错）。
+ * 顶层求值还有个好处：产物本身有语法/注册问题时，报错位置更直白。
+ */
+const VelaGuard = (function () {
+__VELAGUARD_BUNDLE__
+  return globalThis.VelaGuard
+})()
+
+export default {
+  data: {
+    content: ''
+  },
+
+  onInit() {
+    this.boot()
+  },
+
+  boot() {
+    const self = this
+    try {
+      /* ---------- 打包产物句柄 ---------- */
+      if (!VelaGuard) {
+        this.content = '<div class="screen"><div class="empty">打包产物未加载（VelaGuard 句柄为空）</div></div>'
+        return
+      }
+      /*
+       * 与浏览器宿主的差异只有两处：
+       *   · 没有 DOM：setContent 只是把 HTML 交给 data.content
+       *   · 没有事件代理：bindActions 把 data-act 改写成 onclick 字符串
+       * 页面与 app-shell.js 两边完全共用同一份源码。
+       */
+      const env = {
+        mod: function (name) { return VelaGuard.mod(name) },
+        pages: VelaGuard.pages,
+        doc: null,
+        now: function () { return Date.now() },
+        clockText: function (ts) {
+          const d = new Date(ts)
+          const p = function (n) { return n < 10 ? '0' + n : '' + n }
+          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+            ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+        },
+        setContent: function (html) {
+          self.content = html
+        },
+        bindActions: function (html) {
+          /*
+           * 把 <div data-act="x" data-tid="y"> 变成
+           * <div onclick="dispatch('x','y')">。
+           * 少了这一步，openvela 上所有按钮都不会有反应。
+           */
+          return String(html)
+            .replace(/data-act="([A-Za-z0-9_]+)"(\s+data-tid="([^"]*)")?/g,
+              function (m, act, _x, tid) {
+                return 'onclick="dispatch(\'' + act + '\',\'' +
+                  String(tid || '').replace(/'/g, '') + '\')"'
+              })
+        },
+        setHash: null,
+        setTimeout: function (fn, ms) { return setTimeout(fn, ms) },
+        setInterval: function (fn, ms) { return setInterval(fn, ms) },
+        clearInterval: function (id) { clearInterval(id) },
+        afterRender: function () {
+          /* openvela 侧没有输入框焦点/滚动位置这些 DOM 状态需要恢复 */
+        }
+      }
+
+      /* ---------- 端侧 Agent 通道 ---------- */
+      /*
+       * @system.velaclaw 是本板唯一官方通道：
+       *   IDL: promise<AskResponse> ask(AskParam)
+       *        AskResponse = { reply, extra_info, tool_calls: [{name, result}] }
+       *   传输: POSIX 消息队列（/velaclaw_qapp_in、/velaclaw_qapp_out）
+       *   注意: 快应用侧**没有** @system.websocket；也不能让 Agent 去调任意工具。
+       * 用回调式 + 超时兜底，避免 Agent 无响应时界面一直等。
+       */
+      VelaGuard.agent.setAskSender(function (q) {
+        return new Promise(function (resolve, reject) {
+          let done = false
+          const timer = setTimeout(function () {
+            if (!done) {
+              done = true
+              reject(new Error('端侧 Agent 超时未回复（60 秒）'))
+            }
+          }, 60000)
+          try {
+            velaclaw.ask({
+              query: String(q),
+              success: function (res) {
+                done = true
+                clearTimeout(timer)
+                resolve(res || {})
+              },
+              fail: function (msg, code) {
+                done = true
+                clearTimeout(timer)
+                reject(new Error('velaclaw 返回失败：' + (msg || '') + ' code=' + (code || '')))
+              },
+              complete: function () {
+                clearTimeout(timer)
+              }
+            })
+          } catch (e) {
+            done = true
+            clearTimeout(timer)
+            reject(e)
+          }
+        })
+      })
+
+      /* ---------- 启动 ---------- */
+      this.app = VelaGuard.createApp(env)
+      this.app.start('Home')
+
+      /* 供 onclick 字符串调用：把动作派发回外壳 */
+      const shell = this.app
+      globalThis.dispatch = function (act, tid) {
+        shell.dispatch(act, tid)
+      }
+    } catch (e) {
+      this.content = '<div class="screen"><div class="empty">启动失败：' +
+        (e && e.message ? e.message : String(e)) + '</div></div>'
+    }
+  }
+}

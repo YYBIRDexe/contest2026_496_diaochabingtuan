@@ -20,5 +20,9 @@
       <linkfile src="board/<你的board>"      dest="vendor/openvela/boards/contest2026_496_<你的board>"/>
   -->
   <project path="contest2026_496_diaochabingtuan" name="contest2026_496_diaochabingtuan">
+    <!-- 作品形态：快应用（Vela QuickApp）。源码在 quickapp/velaguard-inspection/，
+         由本清单软链到 openvela 工作区的 packages/apps/ 下，
+         对应 repo sync 后的 packages/apps/contest2026_496_velaguard-inspection。 -->
+    <linkfile src="quickapp/velaguard-inspection" dest="packages/apps/contest2026_496_velaguard-inspection"/>
   </project>
 </manifest>

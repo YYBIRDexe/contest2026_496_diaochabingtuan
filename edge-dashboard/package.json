@@ -1,0 +1,17 @@
+{
+  "name": "velaguard-desktop",
+  "version": "1.0.0",
+  "description": "VelaGuard 巡检桌面 —— openvela 快应用形态的可视化操作页面（手机式桌面 + 语音助手等 app）",
+  "private": true,
+  "scripts": {
+    "icons": "node tools/make-icons.js",
+    "build": "node tools/build-preview.js",
+    "preview": "node tools/serve.js 8123",
+    "simulate": "node tools/simulate-m1.js",
+    "check": "node --experimental-vm-modules tools/check.js",
+    "overflow": "node tools/check-overflow.js",
+    "test": "node tools/build-preview.js && node --experimental-vm-modules tools/check.js && node tools/test.js && node tools/test-touch.js && node tools/check-overflow.js && node tools/check-voice.js && node tools/test-chat-scroll.js",
+    "scale": "node tools/scale-pages.js"
+  },
+  "devDependencies": {}
+}

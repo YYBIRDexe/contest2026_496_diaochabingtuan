@@ -1,0 +1,600 @@
+<template>
+  <div class="screen">
+    <!-- ============ 状态栏：时间 / 通信 / 电源 ============ -->
+    <div class="statusbar">
+      <div class="sb-left">
+        <text class="sb-time">{{now}}</text>
+        <text class="sb-label">VelaGuard 巡检桌面</text>
+      </div>
+      <div class="sb-right">
+        <div class="chip" style="{{srcStyle}}" onclick="toggleSource">
+          <text class="chip-text" style="{{srcTextStyle}}">{{srcText}}</text>
+        </div>
+        <div class="chip chip-warn">
+          <text class="chip-text-warn">{{onlineText}}</text>
+        </div>
+        <text class="sb-battery">电池 {{battery}}%</text>
+      </div>
+    </div>
+
+    <!-- ============ 概览区：本轮巡检的一句话结论 ============ -->
+    <div class="hero">
+      <div class="hero-head">
+        <text class="hero-title">本轮巡检 · 第 3 轮</text>
+        <text class="hero-src">{{srcDetail}}</text>
+      </div>
+      <text class="hero-main">{{summaryLine}}</text>
+      <div class="hero-stats">
+        <div class="stat">
+          <text class="stat-num num-done">{{counts.done}}</text>
+          <text class="stat-label">已完成</text>
+        </div>
+        <div class="stat">
+          <text class="stat-num num-run">{{counts.running}}</text>
+          <text class="stat-label">进行中</text>
+        </div>
+        <div class="stat">
+          <text class="stat-num num-block">{{counts.blocked}}</text>
+          <text class="stat-label">阻塞</text>
+        </div>
+        <div class="stat">
+          <text class="stat-num num-idle">{{counts.idle}}</text>
+          <text class="stat-label">未开始</text>
+        </div>
+        <div class="stat">
+          <text class="stat-num num-off">{{counts.offline}}</text>
+          <text class="stat-label">离线</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 应用区：像手机桌面一样排列的程序入口 ============ -->
+    <text class="section-title">全部应用</text>
+    <div class="grid">
+      <div class="tile" for="{{tiles}}" tid="{{$item.uri}}" onclick="openApp">
+        <div class="tile-icon-wrap" style="{{$item.wrapStyle}}">
+          <text class="tile-glyph">{{$item.glyph}}</text>
+        </div>
+        <text class="tile-name">{{$item.name}}</text>
+        <text class="tile-sub">{{$item.sub}}</text>
+      </div>
+    </div>
+
+    <!-- ============ 区域状态条：宽屏下补足纵向空间并提升信息量 ============ -->
+    <text class="section-title">区域状态</text>
+    <div class="zstrip">
+      <div class="zchip" for="{{zoneChips}}">
+        <div class="zdot" style="{{$item.dotStyle}}"></div>
+        <text class="zname">{{$item.name}}</text>
+        <text class="zstate" style="{{$item.textStyle}}">{{$item.statusText}}</text>
+      </div>
+    </div>
+
+    <!-- ============ 底部快捷坞 ============ -->
+    <div class="dock">
+      <div class="dock-btn dock-primary" onclick="quickStart">
+        <text class="dock-text-primary">开始本轮巡检</text>
+      </div>
+      <div class="dock-btn" onclick="quickCancel">
+        <text class="dock-text">一键取消</text>
+      </div>
+      <div class="dock-btn" onclick="openApp" tid="/voice">
+        <text class="dock-text">语音助手</text>
+      </div>
+      <text class="dock-hint">异常已通过 U1P 声光提示</text>
+    </div>
+
+    <!-- ============ 提示浮层 ============ -->
+    <div class="toast" if="{{toast}}">
+      <text class="toast-text">{{toast}}</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  .screen {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 18px 22px 18px 22px;
+    background-color: #0b1220;
+  }
+
+  /* ---------- 状态栏 ---------- */
+  .statusbar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    height: 56px;
+    margin-bottom: 14px;
+  }
+  .sb-left {
+    flex-direction: row;
+    align-items: center;
+  }
+  .sb-time {
+    font-size: 40px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .sb-label {
+    font-size: 27px;
+    color: #64748b;
+    margin-left: 20px;
+  }
+  .sb-right {
+    flex-direction: row;
+    align-items: center;
+  }
+  .sb-battery {
+    font-size: 27px;
+    color: #94a3b8;
+    margin-left: 18px;
+  }
+  .chip {
+    justify-content: center;
+    align-items: center;
+    /* 触摸目标下限：高度不低于 48，避免在触屏上不好点 */
+    min-height: 60px;
+    padding: 8px 22px 8px 22px;
+    border-radius: 26px;
+    margin-left: 16px;
+  }
+  .chip-warn {
+    background-color: rgba(251, 191, 36, 0.16);
+  }
+  .chip-text-warn {
+    font-size: 25px;
+    color: #fbbf24;
+  }
+  .chip-text {
+    font-size: 25px;
+    color: #a9c1e0;
+  }
+
+  /* ---------- 概览卡片 ---------- */
+  .hero {
+    flex-direction: column;
+    width: 100%;
+    padding: 16px 32px 14px 32px;
+    border-radius: 30px;
+    background-color: #16223a;
+  }
+  .hero-title {
+    font-size: 27px;
+    color: #7d8ea8;
+  }
+  .hero-head {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .hero-src {
+    font-size: 24px;
+    color: #64748b;
+  }
+  .hero-main {
+    font-size: 40px;
+    font-weight: bold;
+    color: #e2e8f0;
+    margin-top: 8px;
+  }
+  .hero-stats {
+    flex-direction: row;
+    margin-top: 10px;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 220px;
+    padding: 4px 0px 4px 0px;
+  }
+  .stat-num {
+    font-size: 42px;
+    font-weight: bold;
+  }
+  .num-done {
+    color: #3ddc84;
+  }
+  .num-run {
+    color: #4da3ff;
+  }
+  .num-block {
+    color: #ff6b6b;
+  }
+  .num-idle {
+    color: #94a3b8;
+  }
+  .num-off {
+    color: #fbbf24;
+  }
+  .stat-label {
+    font-size: 25px;
+    color: #7d8ea8;
+    margin-top: 4px;
+  }
+
+  /* ---------- 应用栅格 ---------- */
+  .section-title {
+    font-size: 28px;
+    color: #7d8ea8;
+    margin-top: 12px;
+    margin-bottom: 10px;
+  }
+  .grid {
+    flex: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  /*
+   * 纵向空间预算（1080 高 - 上下 24 padding = 1032）：
+   *   状态栏 56+14 | 概览卡 ~168 | 标题 26+12 | 磁贴两行 2×(160+14)=348
+   *   标题 26+12 | 状态条 48+10 | 快捷坞 88  ≈ 948，留有余量不发生重叠
+   * 磁贴高度 160 是上限，再高会把底部快捷坞顶到状态条上。
+   * 横向：3 列 × 600 + 2 × 24 = 1848，落在 1920 内容宽内。
+   */
+  .tile {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 600px;
+    height: 138px;
+    padding: 6px 14px 6px 14px;
+    margin: 0px 24px 12px 0px;
+    border-radius: 26px;
+    background-color: #16223a;
+  }
+  .tile-icon-wrap {
+    width: 70px;
+    height: 70px;
+    border-radius: 20px;
+    justify-content: center;
+    align-items: center;
+  }
+  .tile-glyph {
+    font-size: 36px;
+    color: #ffffff;
+  }
+  .tile-name {
+    font-size: 26px;
+    font-weight: bold;
+    color: #e2e8f0;
+    margin-top: 6px;
+  }
+  .tile-sub {
+    font-size: 21px;
+    color: #7d8ea8;
+    margin-top: 2px;
+  }
+
+  /* ---------- 区域状态条 ---------- */
+  .zstrip {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-bottom: 2px;
+  }
+  .zchip {
+    flex-direction: row;
+    align-items: center;
+    height: 46px;
+    padding: 0px 18px 0px 16px;
+    margin: 0px 14px 6px 0px;
+    border-radius: 23px;
+    background-color: #16223a;
+  }
+  .zdot {
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    margin-right: 10px;
+  }
+  .zname {
+    font-size: 24px;
+    color: #cbd5e1;
+    margin-right: 10px;
+  }
+  .zstate {
+    font-size: 23px;
+    font-weight: bold;
+  }
+
+  /*
+   * 快捷坞不画面板底色，按钮直接浮在深色屏幕背景上。
+   * 原因：纵向预算紧张时，面板边缘会与上面的区域状态条产生视觉重叠；
+   * 去掉底色后按钮与内容处于同一平面，不再有「被压住」的观感。
+   */
+  .dock {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 68px;
+    margin-top: 0px;
+    padding: 0px 0px 0px 0px;
+    background-color: transparent;
+  }
+  .dock-btn {
+    justify-content: center;
+    align-items: center;
+    height: 60px;
+    padding: 0px 26px 0px 26px;
+    margin-right: 16px;
+    border-radius: 26px;
+    background-color: #23324f;
+  }
+  .dock-primary {
+    background-color: #2f6df6;
+  }
+  .dock-text {
+    font-size: 26px;
+    color: #cbd5e1;
+  }
+  .dock-text-primary {
+    font-size: 26px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .dock-hint {
+    flex: 1;
+    font-size: 22px;
+    color: #64748b;
+    text-align: right;
+  }
+
+  /* ---------- 浮层提示 ---------- */
+  .toast {
+    position: absolute;
+    left: 360px;
+    bottom: 150px;
+    padding: 20px 36px 20px 36px;
+    border-radius: 24px;
+    background-color: #2f6df6;
+  }
+  .toast-text {
+    font-size: 28px;
+    color: #ffffff;
+  }
+</style>
+
+<script>
+  import router from '@system.router'
+  import prompt from '@system.prompt'
+  import store from '../common/store.js'
+  import source from '../common/source.js'
+
+  export default {
+    private: {
+      // 初始占位符，startClock() 会立刻用真实时间覆盖（不要写死一个时间，
+      // 那样在时钟还没跑起来的一瞬间会看到假的"14:26"）
+      now: '— —',
+      battery: 86,
+      onlineText: '3 / 4 车在线',
+      summaryLine: '—',
+      srcText: '演示数据',
+      srcStyle: 'background-color: rgba(148, 163, 184, 0.16)',
+      srcTextStyle: 'color: #94a3b8',
+      srcDetail: '数据来自端侧预设表，未接真实链路',
+      counts: { done: 0, running: 0, blocked: 0, idle: 0, offline: 0 },
+      zoneChips: [],
+      toast: '',
+      // 应用注册表：新增一个 app 只需在这里加一条，磁贴会自动出现
+      appRegistry: [
+        { name: '巡检调度台', sub: '派单与状态', glyph: '巡', uri: '/dispatch', color: '#2F6DF6' },
+        { name: '语音助手', sub: '端侧 AI 对话', glyph: '语', uri: '/voice', color: '#0EA5A4' },
+        { name: '区域与路线', sub: '4 区 4 路线', glyph: '区', uri: '/zones', color: '#7C5CFF' },
+        { name: '巡检记录', sub: '按轮次回看', glyph: '记', uri: '/records', color: '#F59E0B' },
+        { name: '系统与网络', sub: 'Wi-Fi / 模型', glyph: '设', uri: '/system', color: '#64748B' }
+      ],
+      // 模板直接渲染的栅格数据（图标底色通过 style 绑定注入）
+      tiles: []
+    },
+
+    onInit() {
+      this.renderTiles()
+      this.refresh()
+      this.startClock()
+      // 订阅数据源：数据一变就重绘，真实链路接入后无需改这里
+      const self = this
+      source.onUpdate(function () {
+        self.refresh()
+      })
+    },
+
+    /**
+     * 状态栏时间：显示**年月日 + 时分秒**，每秒刷新。
+     *
+     * 为什么改成带日期：这块板子的 RTC 是坏的，开机时间可能是几天前，
+     * 只显示 HH:MM 时根本看不出"这是哪天的几点"——出问题排查时尤其误事。
+     * 秒也加上，一眼能看出时钟是不是在走。
+     *
+     * 注意：显示的是**设备系统时间**。系统时间准不准取决于校时脚本
+     * （linux/校时.sh + clock-sync.timer，经 HTTP 代理取时间）。
+     */
+    startClock() {
+      const pad = function (n) { return n < 10 ? '0' + n : '' + n }
+      const tick = () => {
+        const d = new Date()
+        this.now = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+          ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+      }
+      tick()
+      setInterval(tick, 1000)
+    },
+
+    onShow() {
+      this.refresh()
+    },
+
+    onRefresh() {
+      this.refresh()
+    },
+
+    /** 读取状态快照并汇总本轮覆盖情况 */
+    refresh() {
+      const snap = source.get()
+      if (!snap) {
+        this.summaryLine = '正在连接数据源…'
+        return
+      }
+      const s = snap.summary
+      this.counts = s.counts
+
+      let online = 0
+      let battery = 0
+      snap.cars.forEach(function (c) {
+        if (c.online) {
+          online += 1
+          battery = battery > c.battery ? battery : c.battery
+        }
+      })
+      this.onlineText = online + ' / ' + snap.cars.length + ' 车在线'
+      this.battery = battery
+
+      // 区域状态条：一眼看清每个区域当前处于什么状态
+      this.zoneChips = snap.zones.map(function (z) {
+        const st = store.statusOf(z.status)
+        return {
+          name: z.name,
+          statusText: z.statusText,
+          dotStyle: 'background-color: ' + st.color,
+          textStyle: 'color: ' + st.color
+        }
+      })
+
+      // 数据源指示：让运维一眼看出当前是演示数据还是真实链路
+      this.srcText = snap.sourceText + (snap.connected ? '' : ' · 断连')
+      this.srcStyle = snap.connected
+        ? 'background-color: rgba(61, 220, 132, 0.16)'
+        : 'background-color: rgba(255, 107, 107, 0.16)'
+      this.srcTextStyle = snap.connected ? 'color: #3ddc84' : 'color: #ff6b6b'
+      this.srcDetail = '数据来源：' + snap.sourceText +
+        ' · 更新于 ' + snap.lastUpdateText
+
+      if (s.needAction > 0) {
+        this.summaryLine = s.total + ' 区中 ' + s.counts.done + ' 区已完成，' +
+          s.counts.blocked + ' 区阻塞待重派，' + s.counts.offline + ' 区车辆离线'
+      } else if (s.counts.running > 0) {
+        this.summaryLine = '巡检进行中，已收回 ' + s.counts.done + ' 区结果'
+      } else {
+        this.summaryLine = '四区全部完成，本轮无异常'
+      }
+    },
+
+    /**
+     * 切换数据源：演示 → M1 数据 → 在线模拟。
+     *
+     * 只切到「当前环境下确实可用且真的有数据」的数据源。
+     * 注意不能先切过去再回退——那会把 file 源的轮询定时器留在后台空转。
+     * 因此这里先记录原模式，探测失败就直接切回原模式。
+     */
+    toggleSource() {
+      const order = ['demo', 'file', 'sim']
+      const origin = source.name
+      const self = this
+
+      for (let i = 1; i <= order.length - 1; i += 1) {
+        const cand = order[(order.indexOf(origin) + i) % order.length]
+        source.setMode(cand)
+
+        if (!source.available) {
+          continue
+        }
+        const snap = source.get()
+        if (snap) {
+          // 找到了可用且有数据的数据源
+          this.refresh()
+          prompt.showToast({ message: '数据源已切换为：' + this.srcText, duration: 2000 })
+          return
+        }
+        // 切过去了但还没读到数据：给 file 源一点时间再判一次
+        if (cand === 'file') {
+          prompt.showToast({ message: '正在连接 M1 数据接口…', duration: 1500 })
+          setTimeout(function () {
+            if (source.name !== 'file') {
+              return
+            }
+            if (source.get()) {
+              self.refresh()
+              prompt.showToast({ message: '已连接：' + self.srcText, duration: 2000 })
+            } else {
+              source.setMode(origin)
+              self.refresh()
+              prompt.showToast({
+                message: source.unavailableReason || '数据接口未接通，已回到演示数据',
+                duration: 3000
+              })
+            }
+          }, 2600)
+          return
+        }
+      }
+
+      // 全部不可用：回到原来的数据源
+      source.setMode(origin)
+      this.refresh()
+      prompt.showToast({ message: '仅演示数据可用：' + (source.unavailableReason || ''), duration: 3000 })
+    },
+
+    /** 把应用注册表拍平成可直接绑定的栅格数据 */
+    renderTiles() {
+      const tiles = this.appRegistry.map(function (a) {
+        return {
+          name: a.name,
+          sub: a.sub,
+          glyph: a.glyph,
+          uri: a.uri,
+          wrapStyle: 'background-color: ' + a.color
+        }
+      })
+      this.tiles = tiles
+    },
+
+    openApp(e) {
+      const uri = e && e.target && e.target.attr ? e.target.attr.tid : ''
+      if (!uri) {
+        return
+      }
+      router.push({ uri: uri })
+    },
+
+    /** 快捷坞「开始本轮巡检」：派发所有未开始/阻塞的区域 */
+    quickStart() {
+      const self = this
+      const snap = source.get()
+      if (!snap) {
+        prompt.showToast({ message: '数据源未连接，无法派单', duration: 2000 })
+        return
+      }
+      const pending = snap.zones.filter(function (z) {
+        return z.status === 'idle' || z.status === 'blocked'
+      })
+      if (pending.length === 0) {
+        prompt.showToast({ message: '四个区域都已执行或已完成，无需派单', duration: 2500 })
+        return
+      }
+      Promise.all(pending.map(function (z) {
+        return Promise.resolve(source.dispatch(z.id))
+      })).then(function (rs) {
+        const ok = rs.filter(function (r) {
+          return r && r.ok
+        }).length
+        const fail = pending.length - ok
+        prompt.showToast({
+          message: '已派发 ' + ok + ' 个任务' + (fail > 0 ? '，' + fail + ' 个失败' : ''),
+          duration: 2500
+        })
+        self.refresh()
+      })
+    },
+
+    quickCancel() {
+      const self = this
+      Promise.resolve(source.cancelAll()).then(function (msg) {
+        prompt.showToast({ message: msg.message, duration: 2000 })
+        self.refresh()
+      })
+    }
+  }
+</script>

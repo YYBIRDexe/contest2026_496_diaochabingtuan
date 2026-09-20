@@ -1,0 +1,200 @@
+<template>
+  <div class="screen">
+    <div class="topbar">
+      <div class="back" onclick="goBack">
+        <text class="back-text">返回</text>
+      </div>
+      <text class="topbar-title">巡检记录</text>
+      <div class="chip">
+        <text class="chip-text">按轮次回看覆盖情况</text>
+      </div>
+    </div>
+
+    <div class="list">
+      <div class="record" for="{{records}}">
+        <div class="rec-head">
+          <text class="rec-round">{{$item.round}}</text>
+          <text class="rec-time">{{$item.time}}</text>
+        </div>
+        <div class="zones">
+          <div class="zone" for="{{$item.zones}}">
+            <text class="zone-name">{{$item.name}}</text>
+            <div class="badge" style="{{$item.bg}}">
+              <text class="badge-text" style="{{$item.color}}">{{$item.statusText}}</text>
+            </div>
+          </div>
+        </div>
+        <text class="rec-summary">{{$item.summary}}</text>
+      </div>
+    </div>
+
+    <div class="footer">
+      <text class="footer-hint">每轮为四个区域各保留一条状态，形成可追溯台账</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  .screen {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 27px 33px 27px 33px;
+    background-color: #0b1220;
+  }
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: 93px;
+    margin-bottom: 18px;
+  }
+  .back {
+    justify-content: center;
+    align-items: center;
+    height: 72px;
+    padding: 0px 36px 0px 36px;
+    border-radius: 36px;
+    background-color: #16223a;
+  }
+  .back-text {
+    font-size: 35px;
+    color: #cbd5e1;
+  }
+  .topbar-title {
+    flex: 1;
+    font-size: 45px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 27px;
+  }
+  .chip {
+    padding: 12px 27px 12px 27px;
+    border-radius: 30px;
+    background-color: #1d2a44;
+  }
+  .chip-text {
+    font-size: 32px;
+    color: #a9c1e0;
+  }
+  .list {
+    flex: 1;
+    flex-direction: column;
+    width: 100%;
+  }
+  .record {
+    flex-direction: column;
+    width: 100%;
+    padding: 27px 33px 24px 33px;
+    margin-bottom: 21px;
+    border-radius: 36px;
+    background-color: #16223a;
+  }
+  .rec-head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .rec-round {
+    font-size: 44px;
+    font-weight: bold;
+    color: #e2e8f0;
+  }
+  .rec-time {
+    font-size: 32px;
+    color: #64748b;
+  }
+  .zones {
+    flex-direction: row;
+    margin-top: 18px;
+  }
+  .zone {
+    flex-direction: row;
+    align-items: center;
+    margin-right: 39px;
+  }
+  .zone-name {
+    font-size: 33px;
+    color: #a9c1e0;
+    margin-right: 12px;
+  }
+  .badge {
+    padding: 6px 18px 6px 18px;
+    border-radius: 21px;
+  }
+  .badge-text {
+    font-size: 29px;
+  }
+  .rec-summary {
+    font-size: 32px;
+    color: #8fa3bf;
+    margin-top: 18px;
+  }
+  .footer {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 99px;
+    padding: 0px 30px 0px 30px;
+    border-radius: 36px;
+    background-color: #16223a;
+  }
+  .footer-hint {
+    flex: 1;
+    font-size: 30px;
+    color: #64748b;
+  }
+</style>
+
+<script>
+  import router from '@system.router'
+  import store from '../../common/store.js'
+  import source from '../../common/source.js'
+
+  export default {
+    private: {
+      records: []
+    },
+
+    onInit() {
+      this.records = this.build()
+      const self = this
+      source.onUpdate(function () {
+        self.records = self.build()
+      })
+    },
+
+    onShow() {
+      this.records = this.build()
+    },
+
+    build() {
+      const snap = source.get()
+      if (!snap) {
+        return []
+      }
+      // store 只提供原始状态键（result），这里把状态文案与配色拍平成
+      // style 字符串，模板里直接绑定，避免在模板中做判断
+      return snap.records.map(function (r) {
+        const zones = r.zones.map(function (z) {
+          const st = store.statusOf(z.result)
+          return {
+            name: z.name,
+            statusText: st.text,
+            bg: 'background-color: ' + st.bg,
+            color: 'color: ' + st.color
+          }
+        })
+        return {
+          round: r.round,
+          time: r.time,
+          summary: r.summary,
+          zones: zones
+        }
+      })
+    },
+
+    goBack() {
+      router.back()
+    }
+  }
+</script>

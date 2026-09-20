@@ -1,0 +1,26 @@
+<script>
+  /**
+   * 应用级入口：全局数据与公共方法挂在 $app.$def 上，
+   * 页面里通过 this.$app.$def.xxx 访问。
+   *
+   * 注意：/**manifest**/ 注释由打包工具注入配置，请勿删除。
+   */
+  import store from './common/store.js'
+
+  const APP_META = {
+    name: 'VelaGuard 巡检桌面',
+    version: '1.0.0',
+    // 桌面版本号，用于「系统与网络」页展示
+    build: 'openvela / Vela 快应用'
+  }
+
+  export default {
+    meta: APP_META,
+    store: store,
+
+    /** 统一的会话提示，便于后续接入 U1P 声光告警 */
+    toast(message) {
+      console.log('[VelaGuard] ' + message)
+    }
+  }
+</script>

@@ -1,0 +1,975 @@
+<template>
+  <div class="screen">
+    <!-- ============ 标题栏 ============ -->
+    <div class="topbar">
+      <div class="back" onclick="goBack">
+        <text class="back-text">返回</text>
+      </div>
+      <text class="topbar-title">语音助手</text>
+      <div class="chip" style="{{aiChipStyle}}">
+        <text class="chip-text" style="{{aiChipTextStyle}}">{{aiStatusText}}</text>
+      </div>
+    </div>
+
+    <!-- ============ 会话气泡 ============
+         data-auto-bottom：新消息进来时自动滚到底部。
+         框架层在每次重建后按这个标记决定「继续贴底」还是「保留用户当前位置」，
+         所以往上翻历史时不会被强行拽回底部。
+         id 供页面脚本在追加消息后主动贴底（见 scrollChatToBottom）。 -->
+    <scroll id="chatList" class="chat" scroll-y="true" data-auto-bottom="1">
+      <div class="chat-inner">
+        <div class="bubble-row" for="{{messages}}">
+          <div class="bubble" style="{{$item.bubbleStyle}}">
+            <text class="bubble-role" style="{{$item.roleStyle}}">{{$item.role}}</text>
+            <text class="bubble-text">{{$item.text}}</text>
+          </div>
+        </div>
+        <div class="bubble-row" if="{{thinking}}">
+          <div class="bubble bubble-ai">
+            <text class="bubble-role role-ai">助手</text>
+            <text class="bubble-text">正在思考…</text>
+          </div>
+        </div>
+      </div>
+    </scroll>
+
+    <!-- ============ 预设指令：固定指令识别入口 ============ -->
+    <text class="section-title">常用指令</text>
+    <div class="chips">
+      <div class="quick" for="{{quickReplies}}" tid="{{$item.text}}" onclick="askQuick">
+        <text class="quick-text">{{$item.text}}</text>
+      </div>
+    </div>
+
+    <!-- ============ 底部输入区 ============
+         data-touch：在 touchstart 时就触发（而不是等手指抬起合成 click）。
+         这是「按住说话」手感的关键 —— 触屏上 click 发生在抬指瞬间，
+         用户按下去看不到任何反应，会以为没按到。 -->
+    <div class="input-bar">
+      <div class="mic" style="{{micStyle}}" data-act="onMic" data-touch="onMic">
+        <text class="mic-text">{{micText}}</text>
+      </div>
+      <div class="ask" onclick="askCurrent">
+        <text class="ask-text">发送</text>
+      </div>
+      <text class="hint">{{hint}}</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  .screen {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 27px 33px 27px 33px;
+    background-color: #0b1220;
+  }
+
+  /* ---------- 标题栏 ---------- */
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: 93px;
+    margin-bottom: 18px;
+  }
+  .back {
+    justify-content: center;
+    align-items: center;
+    height: 72px;
+    padding: 0px 36px 0px 36px;
+    border-radius: 36px;
+    background-color: #16223a;
+  }
+  .back-text {
+    font-size: 35px;
+    color: #cbd5e1;
+  }
+  .topbar-title {
+    flex: 1;
+    font-size: 45px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 27px;
+  }
+  .chip {
+    padding: 12px 27px 12px 27px;
+    border-radius: 30px;
+  }
+  .chip-text {
+    font-size: 32px;
+  }
+
+  /* ---------- 会话区 ----------
+   * 触控滑动的可用面积是关键体验指标。
+   *
+   * 这一版修的是「右侧很难滑」的真正原因：
+   *   .chat 是弹性子项，弹性子项的 min-height 默认是 auto —— 也就是
+   *   「不能比内容矮」。内容一多，容器就被撑得超过它该有的高度，
+   *   把「常用指令」和输入栏顶出屏幕外，滚动条也跟着跑到屏幕外面去，
+   *   手指在可见区域里怎么划都不动。min-height: 0 才能让它老实
+   *   待在剩余空间里，overflow-y 才有意义。
+   *
+   * touch-action: pan-y 把垂直方向的滚动明确交给浏览器处理，
+   * 拖动时不会被「点击 / 双击缩放」的判定抢走（触屏上最明显的差别）。
+   */
+  .chat {
+    flex: 1;
+    /* 弹性子项默认 min-height:auto 会被内容撑高，必须清零（见上面的说明） */
+    min-height: 0;
+    width: 100%;
+    border-radius: 33px;
+    background-color: #111c30;
+    /* 触屏：垂直滑动由浏览器接管，横向与缩放手势不抢 */
+    touch-action: pan-y;
+    /* 惯性滚动（Firefox 忽略，移动端 WebKit 用得上） */
+    -webkit-overflow-scrolling: touch;
+    /* 不要橡皮筋回弹，滑到边界就停 */
+    overscroll-behavior: contain;
+  }
+  .chat-inner {
+    flex-direction: column;
+    width: 100%;
+    padding: 27px;
+  }
+  .bubble-row {
+    flex-direction: row;
+    width: 100%;
+    margin-bottom: 21px;
+  }
+  .bubble {
+    flex-direction: column;
+    max-width: 1650px;
+    padding: 27px 39px 27px 39px;
+    border-radius: 33px;
+    /* 气泡本身不参与滚动判定，避免手指落在气泡上时手势丢失 */
+    touch-action: pan-y;
+  }
+  .bubble-ai {
+    background-color: #1d2a44;
+  }
+  .bubble-role {
+    font-size: 29px;
+    margin-bottom: 9px;
+  }
+  .role-ai {
+    color: #4da3ff;
+  }
+  .bubble-text {
+    font-size: 38px;
+    color: #e2e8f0;
+  }
+
+  /* ---------- 预设指令 ---------- */
+  .section-title {
+    font-size: 29px;
+    color: #7d8ea8;
+    margin-top: 12px;
+    margin-bottom: 8px;
+    /* 不参与伸缩：下面的会话区才是唯一该伸缩的元素 */
+    flex-shrink: 0;
+  }
+  .chips {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+    flex-shrink: 0;
+  }
+  .quick {
+    justify-content: center;
+    align-items: center;
+    height: 68px;
+    padding: 0px 28px 0px 28px;
+    margin: 0px 14px 12px 0px;
+    border-radius: 34px;
+    background-color: #1d2a44;
+  }
+  .quick-text {
+    font-size: 30px;
+    color: #a9c1e0;
+  }
+
+  /* ---------- 输入区 ---------- */
+  .input-bar {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 96px;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .mic {
+    justify-content: center;
+    align-items: center;
+    width: 290px;
+    height: 84px;
+    border-radius: 42px;
+  }
+  .mic-text {
+    font-size: 39px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .ask {
+    justify-content: center;
+    align-items: center;
+    width: 185px;
+    height: 84px;
+    margin-left: 18px;
+    border-radius: 42px;
+    background-color: #2f6df6;
+  }
+  .ask-text {
+    font-size: 39px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .hint {
+    flex: 1;
+    font-size: 30px;
+    color: #64748b;
+    text-align: right;
+  }
+</style>
+
+<script>
+  import router from '@system.router'
+  import velaclaw from '@system.velaclaw'
+  import store from '../../common/store.js'
+  import source from '../../common/source.js'
+
+  /*
+   * 本地语音服务（linux/speech-bridge.py，监听 127.0.0.1:8124）。
+   *
+   * 两条通路，按下「说话」优先走第一条：
+   *
+   *  1) 设备自带的完整语音链路（推荐）
+   *     /api/voice/talk —— 桥接到 /home/sunrise/voice_pipeline：
+   *     提示音「请讲」→ VAD 自动判句尾 → 云端 ASR → 意图解析 → 下发小车 → TTS 回报。
+   *     实测端到端约 1.5 秒，且带 13 条预合成的报错话术。界面只负责触发与展示。
+   *
+   *  2) 本地 vosk 离线识别（兜底）
+   *     /api/record —— 录音后用设备上的 vosk 中文模型识别。
+   *     不需要联网，但现场人声电平偏低时识别不出（详见 docs）。
+   *
+   * 为什么不在浏览器里录音：Firefox 的 Web Speech API 在 Linux 上依赖云端，
+   * 本设备无外网；而 getUserMedia 采集到的音频同样要送去识别，绕不开上面两条路。
+   */
+  const SPEECH_URL = 'http://127.0.0.1:8124'
+
+  /** 播放提示音（「请讲」的听觉反馈）。失败不影响主流程。 */
+  function playBeep(kind) {
+    try {
+      fetch(SPEECH_URL + '/api/beep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: kind || 'ready' })
+      }).catch(function () {})
+    } catch (e) {
+      // 忽略：没有语音服务时仍然可以走文本指令
+    }
+  }
+
+  /** 查询设备语音服务的进程状态 */
+  function voiceState() {
+    return fetch(SPEECH_URL + '/api/voice/state')
+      .then(function (r) { return r.json() })
+      .catch(function () { return { ok: false, state: null } })
+  }
+
+  /**
+   * 增量拉取设备侧的对话记录（since = 上次看到的序号）。
+   *
+   * 为什么界面要轮询，而不是等一个请求返回：
+   *   1. 云端 ASR 实测要几十秒到几分钟，阻塞式等待期间界面只能干等，
+   *      用户看到的就是「说完话没有任何反应」；
+   *   2. **喊唤醒词说的那一轮，界面本来完全不知道** —— 设备自己就完成了
+   *      识别与播报。只有读它写下的 /tmp/voice_text.jsonl 才能把两边的
+   *      会话合到同一个界面上。
+   */
+  function voiceRecords(since) {
+    return fetch(SPEECH_URL + '/api/voice/records?since=' + (since || 0))
+      .then(function (r) { return r.json() })
+      .catch(function () { return { ok: false, records: [] } })
+  }
+
+  /**
+   * 触发设备上的一轮完整语音交互，并等结果回来（老接口，保留做兜底）。
+   * 返回 Promise<{ok,text,said,error,detail,stage,reason}>
+   * 注意：服务端最长等 60 秒，所以这里不设超时上限，避免误判失败。
+   */
+  function voiceTalk() {
+    return fetch(SPEECH_URL + '/api/voice/talk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wait: 45 })
+    }).then(function (r) {
+      return r.json()
+    }).catch(function () {
+      return { ok: false, stage: 'no-service',
+               reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }
+    })
+  }
+
+  /**
+   * 第一段：提示音 + 立即开始录音（设备侧）→ 马上返回。
+   *
+   * 为什么不复用 /api/voice/talk：那个接口要等整轮跑完（最长 60 秒）才返回，
+   * 界面在这期间无法确认「到底开始录了没有」，也没法在第二次按下时
+   * 真正把录音停掉 —— 只能干等 VAD 自己判句尾。
+   */
+  function voiceStart() {
+    return fetch(SPEECH_URL + '/api/voice/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    }).then(function (r) {
+      if (r.status === 404) {
+        // 桥是老版本：退回一次性接口，功能仍然可用（只是第二次按下不生效）
+        return voiceTalk()
+      }
+      return r.json()
+    }).catch(function () {
+      return { ok: false, stage: 'no-service',
+               reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }
+    })
+  }
+
+  /**
+   * 第二段：立即结束录音并等识别 + 播报结果。
+   *
+   * wait 只给 2 秒 —— 不是为了等出结果，而是「顺手」把那些极快完成的轮次
+   * 直接带回来。云端识别慢的那部分交给 /api/voice/records 轮询，
+   * 界面不会因此卡住或误报失败。
+   *
+   * 为什么从 8 秒缩到 2 秒：这个请求会占住桥的一条线程，而记录本身在
+   * 「语音开始播报」后 0.1 秒就落盘了 —— 让这个请求早返回，
+   * 文字就能和语音几乎同时出现（用户实测原来差了 10 秒）。
+   */
+  function voiceStop() {
+    return fetch(SPEECH_URL + '/api/voice/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wait: 2 })
+    }).then(function (r) {
+      return r.json()
+    }).catch(function () {
+      return { ok: false, stage: 'no-service',
+               reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }
+    })
+  }
+
+  /** 录音并识别（本地 vosk 兜底通路），返回 Promise<{ok,text,silent,reason}> */
+  function recordSpeech(seconds) {
+    return fetch(SPEECH_URL + '/api/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds: seconds || 4 })
+    }).then(function (r) {
+      return r.json()
+    }).catch(function () {
+      return { ok: false, silent: true, reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }
+    })
+  }
+
+  export default {
+    private: {
+      aiReady: false,
+      aiStatusText: '本地指令模式',
+      aiChipStyle: 'background-color: rgba(251, 191, 36, 0.16)',
+      aiChipTextStyle: 'color: #fbbf24',
+      thinking: false,
+      // 「正在听 / 正在识别」的模态：这期间按键不再接受新的按压
+      listening: false,
+      busy: false,
+      micText: '说话',
+      micStyle: 'background-color: #0EA5A4',
+      hint: '按一下「说话」开始，说完再按一下结束',
+      messages: [],
+      quickReplies: [
+        { text: '开始本轮巡检' },
+        { text: '现在哪些区域没查完' },
+        { text: '展项区为什么阻塞' },
+        { text: '取消全部未完成任务' },
+        { text: '生成巡检报告' }
+      ],
+      // 当前将要发出的问题（由预设指令选择或语音识别结果决定）
+      current: '',
+      // 语音服务能力：micOk=false 表示本机麦克风采不到声音（硬件层限制）
+      speechReady: false,
+      micOk: false,
+      speechNote: '',
+      /*
+       * 会话区是否贴着底部。
+       * true（默认）= 新消息自动跟随下滚；
+       * 用户往上翻历史时会被 scroll 事件置为 false，这时不再强拉回底部，
+       * 否则「想看前面那条」根本做不到。
+       */
+      chatPinned: true,
+      // 设备对话记录的轮询游标（已看到的最后一条序号）
+      lastSeq: 0,
+      // 已经渲染过的记录键，避免「阻塞返回」与「轮询」把同一条显示两遍
+      seenRecords: {},
+      // 轮询是否已停（页面销毁后不再拉）
+      pollStopped: false
+    },
+
+    onInit() {
+      this.messages = [
+        {
+          role: '助手',
+          text: '我是 VelaGuard 语音助手。按一下「说话」开始，说完再按一下「结束」；' +
+                '也可以直接喊「Hello, openvela」，或点下面的常用指令。',
+          bubbleStyle: 'background-color: #1d2a44',
+          roleStyle: 'color: #4da3ff'
+        }
+      ]
+      this.probeAI()
+      // 先把游标对到「当前最新」，避免一进页面就把历史对话全灌进来
+      this.primeRecords()
+    },
+
+    onShow() {
+      this.scrollChatToBottom()
+      this.watchChatScroll()
+      this.startPolling()
+    },
+
+    onHide() {
+      this.stopPolling()
+    },
+
+    onDestroy() {
+      this.stopPolling()
+    },
+
+    /** 记住设备侧「已经说到第几条」，之后只显示新出现的 */
+    primeRecords() {
+      const self = this
+      voiceRecords(0).then(function (r) {
+        if (r && r.ok) {
+          self.lastSeq = r.lastSeq || 0
+        }
+      })
+    },
+
+    /**
+     * 每 1 秒问一次设备「有没有新的对话记录」。
+     *
+     * 这一条轮询同时解决了三件事：
+     *   1. 云端识别慢 —— 界面不再傻等一个请求，识别完自然会出现；
+     *   2. 唤醒词触发的那一轮（界面没参与）也会显示出来；
+     *   3. 用户说完话看不到反馈的焦虑 —— 至少会先看到「你」那句。
+     *
+     * 间隔取 1 秒（原来是 2 秒）：设备上那条记录是在**语音开始播报**后
+     * 0.1 秒落盘的，所以轮询间隔直接决定「文字比语音晚多少」。
+     * 1 秒是延迟与请求量的折中（本地请求，代价可忽略）。
+     */
+    startPolling() {
+      const self = this
+      if (this._pollTimer) {
+        return
+      }
+      this.pollStopped = false
+      this._pollTimer = setInterval(function () {
+        if (self.pollStopped) {
+          return
+        }
+        voiceRecords(self.lastSeq).then(function (r) {
+          if (!r || !r.ok) {
+            return
+          }
+          const list = r.records || []
+          let added = 0
+          list.forEach(function (rec) {
+            if (rec.seq > self.lastSeq) {
+              self.lastSeq = rec.seq
+            }
+            if (self.renderRecord(rec)) {
+              added += 1
+            }
+          })
+          if (added > 0) {
+            // 有新对话就贴底（历史翻看状态由 scrollChatToBottom 自己判断）
+            self.scrollChatToBottom()
+          }
+        })
+      }, 1000)
+    },
+
+    stopPolling() {
+      this.pollStopped = true
+      if (this._pollTimer) {
+        clearInterval(this._pollTimer)
+        this._pollTimer = null
+      }
+    },
+
+    /**
+     * 把设备的一条记录渲染成气泡，返回是否真的加了新消息。
+     *
+     * 去重按「序号」做：走阻塞返回的那条结果（/api/voice/stop）没有 seq，
+     * 就用 ts+文本当键，两种情况都不会重复显示。
+     */
+    renderRecord(rec) {
+      if (!rec) {
+        return false
+      }
+      const key = rec.seq ? ('s' + rec.seq) : ((rec.ts || '') + '|' + (rec.text || ''))
+      if (this.seenRecords[key]) {
+        return false
+      }
+      this.seenRecords[key] = true
+
+      const text = String(rec.text || '').trim()
+      const reply = String(rec.said || '').trim() || this.describeRecord(rec)
+      if (!text && !reply) {
+        return false
+      }
+      if (text) {
+        this.pushMessage('你', text, false)
+      }
+      if (reply) {
+        this.pushMessage('助手', reply, true)
+      }
+      return true
+    },
+
+    /**
+     * 记录里没有「说了什么」时，用错误码/意图翻一句人话。
+     *
+     * 为什么需要：设备把「念出来的那句」写进 said 字段，但更早的版本只在
+     * 出错时才写。轮到 @@SPEAK@@ 播报（比如「小车都联系不上」）时说的那句
+     * 没被记下来，界面就会只有「你」没有「助手」。这里按意图兜一句，
+     * 保证界面上永远看得出「它到底干了什么」。
+     */
+    describeRecord(rec) {
+      const errMap = {
+        net: '网络不通', asr: '识别失败', asr_to: '识别超时',
+        nohear: '没听清', nomatch: '没听懂', unsafe: '这条指令不安全',
+        noaction: '这条指令还没配置', execfail: '执行失败',
+        vcmderr: '命令解析出错', micbusy: '麦克风被占用',
+        recfail: '录音失败', nomic: '没听到声音', nocar: '小车联系不上'
+      }
+      if (rec.error && errMap[rec.error]) {
+        return errMap[rec.error]
+      }
+      const intentMap = {
+        forward: '前进', backward: '后退', turn_left: '左转', turn_right: '右转',
+        strafe_left: '向左平移', strafe_right: '向右平移', stop: '急停',
+        reset: '复位', start_formation: '编队实验', status: '查询状态',
+        car_check: '查询小车连接', battery: '查询电量', confirm: '已确认'
+      }
+      if (rec.intent && intentMap[rec.intent]) {
+        return '已执行：' + intentMap[rec.intent]
+      }
+      if (rec.error) {
+        return '出错了（' + rec.error + '）'
+      }
+      return ''
+    },
+
+    /**
+     * 监听会话区的滚动，判断用户是不是翻到上面去了。
+     * 监听失败不影响使用：失败时 chatPinned 保持 true，退化为「一律贴底」。
+     */
+    watchChatScroll() {
+      const self = this
+      if (this._chatWatched) {
+        return
+      }
+      const el = (function () {
+        try {
+          return document.getElementById('chatList')
+        } catch (e) {
+          return null
+        }
+      })()
+      if (!el || typeof el.addEventListener !== 'function') {
+        return
+      }
+      this._chatWatched = true
+      el.addEventListener('scroll', function () {
+        const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+        self.chatPinned = gap < 40
+      })
+    },
+
+    /**
+     * 探测可用的语音能力，决定界面话术。
+     *
+     * 两条链路，优先级从高到低：
+     *   1. 端侧 openvela AI（@system.velaclaw）—— 本设备不支持，通常拿不到；
+     *   2. 本地离线语音服务（vosk，见 linux/speech-bridge.py）—— 已装可用，
+     *      但麦克风采不到声音，首次录音后会如实降级为「用常用指令」提示。
+     *
+     * 无论哪条可用，本地指令表始终可用，不会出现「问不了」的情况。
+     */
+    probeAI() {
+      const self = this
+
+      // 先探本地离线语音服务（本设备上真正可用的那条）
+      fetch(SPEECH_URL + '/api/health').then(function (r) {
+        return r.json()
+      }).then(function (h) {
+        self.speechReady = !!(h && h.ok && h.model)
+        if (self.speechReady) {
+          self.speechNote = h.engine || 'vosk 离线'
+          self.hint = '按一下「说话」开始，说完再按一下「结束」'
+        }
+      }).catch(function () {
+        self.speechReady = false
+        self.hint = '本地指令可用，巡检数据来自 ' + self.sourceName()
+      })
+
+      // 再看端侧 AI（本设备一般不可用，拿到就升级）
+      let mod = null
+      try {
+        mod = velaclaw
+      } catch (e) {
+        mod = null
+      }
+      if (!mod || typeof mod.ask !== 'function') {
+        this.aiReady = false
+        this.aiStatusText = '本地指令模式'
+        return
+      }
+      try {
+        mod.ask({
+          query: 'ping',
+          success() {
+            self.aiReady = true
+            self.aiStatusText = '端侧 AI 已就绪'
+            self.aiChipStyle = 'background-color: rgba(61, 220, 132, 0.16)'
+            self.aiChipTextStyle = 'color: #3ddc84'
+            self.hint = '已连接端侧 AI'
+          },
+          fail(data, code) {
+            self.aiReady = false
+            self.aiStatusText = '本地指令模式'
+          }
+        })
+      } catch (err) {
+        this.aiReady = false
+        this.aiStatusText = '本地指令模式'
+      }
+    },
+
+    sourceName() {
+      const snap = source.get()
+      return snap ? snap.sourceText : '未连接'
+    },
+
+    askQuick(e) {
+      const text = e && e.target && e.target.attr ? e.target.attr.tid : ''
+      if (!text) {
+        return
+      }
+      this.current = text
+      this.ask(text)
+    },
+
+    askCurrent() {
+      if (!this.current) {
+        this.pushMessage('你', '请先点一条常用指令，或点「说话」', false)
+        return
+      }
+      this.ask(this.current)
+    },
+
+    /**
+     * 「说话」按钮 —— 两段式，像对讲机一样用：
+     *
+     *   第一次按 → 设备响一下提示音（上行音「嘀嘟」）+ **立刻开始录音**，
+     *              界面同时变黄显示「结束」，一秒都不用等。
+     *   第二次按 → 立即结束录音 → 音频送云端识别 → 解析 → 下发小车
+     *              → 语音回报，结果再填回会话区。
+     *
+     * 为什么必须是按一次而不是按住：这块触控屏的拖动手势与长按判定
+     * 会互相干扰，长按往往会先被识别成滑动；改成「按一下开始、
+     * 再按一下结束」在触屏上稳定得多，也不会漏掉初始化那一拍。
+     *
+     * 不按第二次也能用：设备侧的 VAD 在说完之后会自动收尾（默认约 0.8 秒静音），
+     * 这时界面会自己走到「正在识别」并显示结果。
+     */
+    onMic() {
+      const self = this
+
+      // 已经在识别/播报中：忽略，避免用户连点把状态搞乱
+      if (this.busy) {
+        return
+      }
+
+      // ---------- 第二次按：立即结束录音 ----------
+      if (this.listening) {
+        this.listening = false
+        this.busy = true
+        this.micText = '识别中'
+        this.micStyle = 'background-color: #64748b'
+        this.hint = '正在识别…'
+        playBeep('stop')          // 下行音 = 结束
+        voiceStop().then(function (res) {
+          self.finishTalk(res)
+        })
+        return
+      }
+
+      // ---------- 第一次按：提示音 + 立即开始录音 ----------
+      this.busy = true
+      this.hint = '正在启动…'
+      playBeep('listen')          // 上行音 = 开始
+      voiceState().then(function (st) {
+        const s = st && st.state
+        if (!s || !s.assistant) {
+          return { ok: false, stage: 'no-service',
+                   reason: '设备语音服务未运行' }
+        }
+        return voiceStart()
+      }).then(function (res) {
+        if (!res || !res.ok) {
+          // 起不来就如实说，不要留在「正在听」的假状态里
+          self.busy = false
+          self.listening = false
+          self.micText = '说话'
+          self.micStyle = 'background-color: #0EA5A4'
+          self.hint = (res && res.reason) || '语音服务不可用'
+          self.pushMessage('助手',
+            '没能开始录音：' + ((res && res.reason) || '未知原因') +
+            '。可以先点下面的常用指令。', true)
+          return
+        }
+        /*
+         * 桥是老版本时会直接跑完一整轮并把结果带回来（stage='done'），
+         * 这时就不要停在「正在听」，直接出结果。
+         */
+        if (res.stage === 'done') {
+          self.finishTalk(res)
+          return
+        }
+        self.busy = false
+        self.listening = true
+        self.micText = '结束'
+        self.micStyle = 'background-color: #F59E0B'
+        self.hint = '正在听…说完再按一下「结束」'
+      })
+    },
+
+    /** 收尾：把一轮语音的结果填进会话区并复位按键 */
+    finishTalk(res) {
+      this.busy = false
+      this.listening = false
+      this.micText = '说话'
+      this.micStyle = 'background-color: #0EA5A4'
+
+      if (!res) {
+        this.hint = '没有拿到结果'
+        return
+      }
+
+      /*
+       * 录音已经结束，但云端还没出结果（stage=recognizing）。
+       * 这时**不要**显示任何「失败」—— 设备还在识别，结果会由轮询补上。
+       * 早期版本在这里一律按失败处理，用户看到的就是「说了话却什么都没发生」。
+       */
+      if (res.ok && res.stage === 'recognizing') {
+        this.hint = '录音已结束，正在识别…（云端较慢，结果会自动显示）'
+        return
+      }
+
+      if (!res.ok) {
+        this.hint = res.reason || '语音交互失败'
+        this.pushMessage('助手', '没成功：' + (res.reason || '未知原因'), true)
+        return
+      }
+
+      // 已经把结果带回来了：走和轮询同一条渲染路径（按 seq/ts 去重，不会重复显示）
+      const shown = this.renderRecord({
+        seq: res.seq,
+        ts: res.ts,
+        text: res.text,
+        said: res.said,
+        error: res.error,
+        intent: res.intent
+      })
+      if (shown) {
+        this.hint = res.stopMode === 'vad-auto' ? '完成（说完自动结束的）' : '完成'
+        return
+      }
+      if (res.text || res.said) {
+        this.hint = '完成'
+        return
+      }
+      this.hint = '设备没识别到内容，结果出来会自动显示'
+    },
+
+
+    ask(query) {
+      this.pushMessage('你', query, false)
+      const self = this
+      // 本地可闭环的指令优先本地执行，避免依赖大模型可用性
+      const local = this.tryLocal(query)
+      if (local) {
+        this.pushMessage('助手', local, true)
+        return
+      }
+      if (!this.aiReady) {
+        /*
+         * 这句以前写的是「请先在串口控制台执行 ai_agent & 并完成 set_llm 配置」，
+         * 用户看不懂也不知道该做什么。改为说明当前实际能力与可行做法。
+         */
+        this.pushMessage('助手',
+          '这句我答不上来。当前可用的是「常用指令」里的巡检类问题，' +
+          '它们直接读本地巡检数据，不依赖大模型。', true)
+        return
+      }
+      this.thinking = true
+      velaclaw.ask({
+        query: query,
+        success(res) {
+          self.thinking = false
+          self.pushMessage('助手', res && res.reply ? res.reply : '（未返回内容）', true)
+        },
+        fail(data, code) {
+          self.thinking = false
+          self.pushMessage('助手', '调用端侧 AI 失败，错误码 ' + code, true)
+        }
+      })
+    },
+
+    /**
+     * 本地指令表：巡检控制类操作不经过大模型，直接操作端侧预设表，
+     * 保证「任务派得出、结果收得回」这条主线不依赖网络。
+     */
+    tryLocal(query) {
+      const snap = source.get()
+      if (!snap) {
+        return '数据源未连接，请先确认 M1 侧是否在写 data/state.json。'
+      }
+      if (query.indexOf('开始') >= 0 && query.indexOf('巡检') >= 0) {
+        const idle = snap.zones.filter(function (z) {
+          return z.status === 'idle' || z.status === 'blocked'
+        })
+        if (idle.length === 0) {
+          return '当前没有待派发的区域，四个区域都已执行或已完成。'
+        }
+        let ok = 0
+        idle.forEach(function (z) {
+          const r = store.dispatchTask(z.id)
+          if (r.ok) {
+            ok += 1
+          }
+        })
+        return '已向 ' + ok + ' 个区域下发任务单：' + idle.map(function (z) {
+          return z.name
+        }).join('、') + '。'
+      }
+      if (query.indexOf('取消') >= 0) {
+        return store.cancelAll().message
+      }
+      if (query.indexOf('没查完') >= 0 || query.indexOf('进度') >= 0 || query.indexOf('哪些区域') >= 0) {
+        const pending = snap.zones.filter(function (z) {
+          return z.status !== 'done'
+        })
+        if (pending.length === 0) {
+          return '四个区域都已查完，本轮巡检无未完成项。'
+        }
+        return '尚未完成的区域有 ' + pending.length + ' 个：' + pending.map(function (z) {
+          return z.name + '（' + z.statusText + '）'
+        }).join('、') + '。需要现在重新派发吗？'
+      }
+      if (query.indexOf('阻塞') >= 0 || query.indexOf('为什么') >= 0) {
+        const blocked = snap.zones.filter(function (z) {
+          return z.status === 'blocked'
+        })
+        if (blocked.length === 0) {
+          return '当前没有阻塞区域。'
+        }
+        return blocked.map(function (z) {
+          return z.name + '：' + z.detail + '（车辆 ' + z.car + '，已完成 ' + z.progress + '%）'
+        }).join('；')
+      }
+      if (query.indexOf('数据') >= 0 || query.indexOf('来源') >= 0 || query.indexOf('连接') >= 0) {
+        return '当前数据源为「' + snap.sourceText + '」' +
+          (snap.connected ? '，链路正常。' : '，链路已断开。') +
+          '更新于 ' + snap.lastUpdateText + '。'
+      }
+      if (query.indexOf('报告') >= 0 || query.indexOf('汇总') >= 0) {
+        const s = snap.summary
+        return '本轮巡检共 ' + s.total + ' 个区域：已完成 ' + s.counts.done +
+          '、进行中 ' + s.counts.running + '、阻塞 ' + s.counts.blocked +
+          '、未开始 ' + s.counts.idle + '、离线 ' + s.counts.offline + '。'
+      }
+      return ''
+    },
+
+    pushMessage(role, text, isAI) {
+      const isUser = !isAI
+      const item = {
+        role: role,
+        text: text,
+        bubbleStyle: isUser
+          ? 'background-color: #2f6df6; align-self: flex-end'
+          : 'background-color: #1d2a44',
+        roleStyle: isUser ? 'color: #cfe0ff' : 'color: #4da3ff'
+      }
+      const list = this.messages.slice()
+      list.push(item)
+      this.messages = list
+      this.scrollChatToBottom()
+    },
+
+    /**
+     * 把会话区滚到底部。
+     *
+     * 两件事要同时成立，界面才「不跳」：
+     *   1. 新消息进来一定贴底（主要诉求：看到最新一条）
+     *   2. 用户主动往上翻看历史时，不要被硬拽回底部
+     *
+     * 第 2 点靠 scroll 事件里的「是否贴着底部」判断实现：
+     * 手指停在中间时 chatPinned 为 false，这时不打扰用户。
+     * DOM 与属性两种写法都试一遍：浏览器预览用 DOM，
+     * 真机 <scroll> 组件支持 scrollTo，两者任一成功即可。
+     */
+    scrollChatToBottom() {
+      const self = this
+      const run = function () {
+        let el = null
+        try {
+          el = document.getElementById('chatList')
+        } catch (e) {
+          el = null
+        }
+        if (!el) {
+          return
+        }
+        // 用户正在翻历史：不打扰
+        if (el.scrollHeight > el.clientHeight + 4) {
+          const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+          if (gap > 40 && self.chatPinned === false) {
+            return
+          }
+          self.chatPinned = true
+        }
+        if (typeof el.scrollTo === 'function') {
+          try {
+            el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+          } catch (e) {
+            el.scrollTop = el.scrollHeight
+          }
+        } else {
+          el.scrollTop = el.scrollHeight
+        }
+      }
+      // 等这一帧渲染完成再滚，否则拿到的 scrollHeight 还是旧的
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(run)
+      } else {
+        run()
+      }
+    },
+
+    goBack() {
+      router.back()
+    }
+  }
+</script>

@@ -1,0 +1,31 @@
+{
+  "package": "com.velaguard.inspection",
+  "name": "VelaGuard 巡检",
+  "icon": "/common/logo.png",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "minAPILevel": 1,
+  "features": [
+    { "name": "system.velaclaw" }
+  ],
+  "permissions": [
+    { "name": "hapjs.permission.DEVICE_INFO" }
+  ],
+  "config": {
+    "logLevel": "log",
+    "designWidth": 720,
+    "designHeight": 1280
+  },
+  "display": {
+    "backgroundColor": "#0B1220"
+  },
+  "router": {
+    "entry": "index",
+    "pages": {
+      "index": {
+        "component": "index",
+        "path": "/"
+      }
+    }
+  }
+}

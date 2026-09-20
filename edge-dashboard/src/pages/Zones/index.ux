@@ -1,0 +1,238 @@
+<template>
+  <div class="screen">
+    <div class="topbar">
+      <div class="back" onclick="goBack">
+        <text class="back-text">返回</text>
+      </div>
+      <text class="topbar-title">区域与路线</text>
+      <div class="chip">
+        <text class="chip-text">{{zones.length}} 个区域 · 固定路线</text>
+      </div>
+    </div>
+
+    <text class="section-title">首期只做「固定区域 + 固定路线」，保证车端可复现</text>
+
+    <div class="grid">
+      <div class="card" for="{{zones}}">
+        <div class="card-head">
+          <div class="zone-tag" style="{{$item.tagStyle}}">
+            <text class="zone-tag-text">{{$item.id}}</text>
+          </div>
+          <text class="zone-name">{{$item.name}}</text>
+        </div>
+
+        <div class="row">
+          <text class="row-label">路线编号</text>
+          <text class="row-value">{{$item.route}}</text>
+        </div>
+        <div class="row">
+          <text class="row-label">动作序列</text>
+          <text class="row-value">{{$item.routeDesc}}</text>
+        </div>
+        <div class="row">
+          <text class="row-label">责任车辆</text>
+          <text class="row-value">{{$item.car}}</text>
+        </div>
+        <div class="row">
+          <text class="row-label">本轮用时</text>
+          <text class="row-value">{{$item.duration}}</text>
+        </div>
+
+        <div class="detail" style="{{$item.badgeStyle}}">
+          <text class="detail-text" style="{{$item.badgeTextStyle}}">{{$item.statusText}} · {{$item.detail}}</text>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <text class="footer-hint">新增区域只需扩展端侧预设表 src/common/store.js 的 ZONES</text>
+      <div class="dock-btn" onclick="goDispatch">
+        <text class="dock-text">去派单</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .screen {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 18px 22px 18px 22px;
+    background-color: #0b1220;
+  }
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: 62px;
+    margin-bottom: 12px;
+  }
+  .back {
+    justify-content: center;
+    align-items: center;
+    height: 48px;
+    padding: 0px 24px 0px 24px;
+    border-radius: 24px;
+    background-color: #16223a;
+  }
+  .back-text {
+    font-size: 23px;
+    color: #cbd5e1;
+  }
+  .topbar-title {
+    flex: 1;
+    font-size: 30px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 18px;
+  }
+  .chip {
+    padding: 8px 18px 8px 18px;
+    border-radius: 20px;
+    background-color: #1d2a44;
+  }
+  .chip-text {
+    font-size: 21px;
+    color: #a9c1e0;
+  }
+  .section-title {
+    font-size: 22px;
+    color: #7d8ea8;
+    margin-bottom: 12px;
+  }
+  .grid {
+    flex: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  /* 3 列 × 590 + 2 × 24 = 1818，落在 1920 内容宽内 */
+  .card {
+    flex-direction: column;
+    width: 590px;
+    padding: 20px 24px 18px 24px;
+    margin: 0px 24px 20px 0px;
+    border-radius: 26px;
+    background-color: #16223a;
+  }
+  .card-head {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .zone-tag {
+    justify-content: center;
+    align-items: center;
+    width: 62px;
+    height: 62px;
+    border-radius: 18px;
+  }
+  .zone-tag-text {
+    font-size: 26px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .zone-name {
+    font-size: 30px;
+    font-weight: bold;
+    color: #e2e8f0;
+    margin-left: 16px;
+  }
+  .row {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 6px 0px 6px 0px;
+  }
+  .row-label {
+    font-size: 21px;
+    color: #64748b;
+  }
+  .row-value {
+    font-size: 21px;
+    color: #cbd5e1;
+  }
+  .detail {
+    width: 100%;
+    padding: 12px 16px 12px 16px;
+    margin-top: 10px;
+    border-radius: 16px;
+  }
+  .detail-text {
+    font-size: 21px;
+  }
+  .footer {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 72px;
+    padding: 0px 20px 0px 20px;
+    border-radius: 24px;
+    background-color: #16223a;
+  }
+  .footer-hint {
+    flex: 1;
+    font-size: 20px;
+    color: #64748b;
+  }
+  .dock-btn {
+    justify-content: center;
+    align-items: center;
+    height: 50px;
+    padding: 0px 28px 0px 28px;
+    border-radius: 25px;
+    background-color: #2f6df6;
+  }
+  .dock-text {
+    font-size: 23px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+</style>
+
+<script>
+  import router from '@system.router'
+  import store from '../../common/store.js'
+  import source from '../../common/source.js'
+
+  export default {
+    private: {
+      zones: []
+    },
+
+    onInit() {
+      this.refresh()
+      const self = this
+      source.onUpdate(function () {
+        self.refresh()
+      })
+    },
+
+    onShow() {
+      this.refresh()
+    },
+
+    refresh() {
+      const snap = source.get()
+      if (!snap) {
+        return
+      }
+      const palette = ['#2F6DF6', '#0EA5A4', '#7C5CFF', '#F59E0B']
+      this.zones = snap.zones.map(function (z, i) {
+        const st = store.statusOf(z.status)
+        return Object.assign({}, z, {
+          tagStyle: 'background-color: ' + palette[i % palette.length],
+          badgeStyle: 'background-color: ' + st.bg,
+          badgeTextStyle: 'color: ' + st.color
+        })
+      })
+    },
+
+    goDispatch() {
+      router.push({ uri: '/dispatch' })
+    },
+
+    goBack() {
+      router.back()
+    }
+  }
+</script>

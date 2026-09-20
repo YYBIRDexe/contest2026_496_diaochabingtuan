@@ -1,0 +1,301 @@
+<template>
+  <div class="screen">
+    <div class="topbar">
+      <div class="back" onclick="goBack">
+        <text class="back-text">返回</text>
+      </div>
+      <text class="topbar-title">系统与网络</text>
+      <div class="chip">
+        <text class="chip-text">{{checkText}}</text>
+      </div>
+    </div>
+
+    <div class="body">
+      <!-- ---------- 左：设备与通信 ---------- -->
+      <div class="col">
+        <text class="section-title">设备</text>
+        <div class="panel">
+          <div class="row" for="{{device}}">
+            <text class="row-label">{{$item.k}}</text>
+            <text class="row-value">{{$item.v}}</text>
+          </div>
+        </div>
+
+        <text class="section-title">通信 · C1 Wi-Fi</text>
+        <div class="panel">
+          <div class="row" for="{{links}}">
+            <text class="row-label">{{$item.id}}</text>
+            <text class="row-value">{{$item.ip}}</text>
+            <text class="row-state" style="{{$item.style}}">{{$item.state}}</text>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- 右：能力与配置 ---------- -->
+      <div class="col">
+        <text class="section-title">端侧 AI 配置（语音助手依赖）</text>
+        <div class="panel">
+          <div class="row" for="{{aiConfig}}">
+            <text class="row-label">{{$item.k}}</text>
+            <text class="row-value">{{$item.v}}</text>
+          </div>
+        </div>
+
+        <text class="section-title">能力开关</text>
+        <div class="panel">
+          <div class="row" for="{{caps}}">
+            <text class="row-label">{{$item.name}}</text>
+            <div class="badge" style="{{$item.style}}">
+              <text class="badge-text" style="{{$item.textStyle}}">{{$item.state}}</text>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="btn btn-primary" onclick="runCheck">
+            <text class="btn-text-primary">重新自检</text>
+          </div>
+          <div class="btn" onclick="goVoice">
+            <text class="btn-text">打开语音助手</text>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <text class="footer-hint">{{footer}}</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  .screen {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 16px 30px 16px 30px;
+    background-color: #0b1220;
+  }
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: 60px;
+    margin-bottom: 8px;
+  }
+  .back {
+    justify-content: center;
+    align-items: center;
+    height: 50px;
+    padding: 0px 26px 0px 26px;
+    border-radius: 36px;
+    background-color: #16223a;
+  }
+  .back-text {
+    font-size: 35px;
+    color: #cbd5e1;
+  }
+  .topbar-title {
+    flex: 1;
+    font-size: 45px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 27px;
+  }
+  .chip {
+    padding: 12px 27px 12px 27px;
+    border-radius: 30px;
+    background-color: #1d2a44;
+  }
+  .chip-text {
+    font-size: 32px;
+    color: #a9c1e0;
+  }
+  .body {
+    flex: 1;
+    flex-direction: row;
+    width: 100%;
+  }
+  .col {
+    flex-direction: column;
+    flex: 1;
+    margin-right: 27px;
+  }
+  .section-title {
+    font-size: 28px;
+    color: #7d8ea8;
+    margin-bottom: 8px;
+  }
+  .panel {
+    flex-direction: column;
+    width: 100%;
+    padding: 2px 22px 2px 22px;
+    margin-bottom: 8px;
+    border-radius: 33px;
+    background-color: #16223a;
+  }
+  .row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0px 6px 0px;
+  }
+  .row-label {
+    font-size: 32px;
+    color: #7d8ea8;
+  }
+  .row-value {
+    flex: 1;
+    font-size: 32px;
+    color: #cbd5e1;
+    text-align: right;
+  }
+  .row-state {
+    font-size: 32px;
+    margin-left: 21px;
+  }
+  .badge {
+    padding: 5px 16px 5px 16px;
+    border-radius: 24px;
+  }
+  .badge-text {
+    font-size: 30px;
+  }
+  .actions {
+    flex-direction: row;
+  }
+  .btn {
+    justify-content: center;
+    align-items: center;
+    height: 54px;
+    padding: 0px 32px 0px 32px;
+    margin-right: 16px;
+    border-radius: 41px;
+    background-color: #23324f;
+  }
+  .btn-primary {
+    background-color: #2f6df6;
+  }
+  .btn-text {
+    font-size: 35px;
+    color: #cbd5e1;
+  }
+  .btn-text-primary {
+    font-size: 35px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .footer {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    padding: 9px 20px 9px 20px;
+    border-radius: 22px;
+    background-color: #16223a;
+  }
+  .footer-hint {
+    flex: 1;
+    font-size: 30px;
+    color: #64748b;
+  }
+</style>
+
+<script>
+  import router from '@system.router'
+  import store from '../../common/store.js'
+  import source from '../../common/source.js'
+
+  export default {
+    private: {
+      checkText: '自检中…',
+      footer: '',
+      device: [
+        { k: '设备名称', v: 'VelaGuard 巡检调度台' },
+        { k: '系统', v: 'Linux（M1 · Horizon X3M）' },
+        { k: '主控', v: 'U2P · Horizon X3M' },
+        { k: '通信', v: 'C1 · Wi-Fi + BLE' },
+        { k: '交互外设', v: 'U1P · GD32F470ZKT6' },
+        { k: '屏幕', v: '外接触控显示器' }
+      ],
+      links: [],
+      aiConfig: [
+        { k: '界面形态', v: '浏览器全屏看板' },
+        { k: '数据通道', v: 'JSON 文件 / 本地接口' },
+        { k: '语音识别', v: '本地指令表' },
+        { k: '大模型', v: '未接入（离线运行）' },
+        { k: '当前状态', v: '待自检' }
+      ],
+      caps: []
+    },
+
+    onInit() {
+      this.buildStatic()
+      this.runCheck()
+      const self = this
+      source.onUpdate(function () {
+        self.runCheck()
+      })
+    },
+
+    buildStatic() {
+      const snap = source.get()
+      const cars = snap ? snap.cars : []
+      this.links = cars.map(function (c) {
+        return {
+          id: c.id + ' · ' + c.zone,
+          ip: c.ip,
+          state: c.online ? '在线' : '离线',
+          style: 'color: ' + (c.online ? '#3ddc84' : '#fbbf24')
+        }
+      })
+
+      const yes = { state: '已启用', style: 'background-color: rgba(61,220,132,0.16)', textStyle: 'color: #3ddc84' }
+      const reserve = { state: '预留', style: 'background-color: rgba(148,163,184,0.16)', textStyle: 'color: #94a3b8' }
+      this.caps = [
+        Object.assign({ name: '区域与任务清单' }, yes),
+        Object.assign({ name: '任务派单与回收' }, yes),
+        Object.assign({ name: '异常提示与一键取消' }, yes),
+        Object.assign({ name: '巡检记录汇总' }, yes),
+        Object.assign({ name: '语音控制（本地指令）' }, yes),
+        Object.assign({ name: 'S3 麦克风语音识别' }, reserve),
+        Object.assign({ name: '实时视频回传' }, reserve),
+        Object.assign({ name: '云端 AI 服务' }, reserve)
+      ]
+    },
+
+    runCheck() {
+      const snap = source.get()
+      if (!snap) {
+        this.checkText = '未连接'
+        return
+      }
+      let online = 0
+      snap.cars.forEach(function (c) {
+        if (c.online) {
+          online += 1
+        }
+      })
+
+      this.checkText = '数据源：' + snap.sourceText + (snap.connected ? '' : '（断连）')
+
+      const aiConfig = this.aiConfig.slice()
+      aiConfig[4] = {
+        k: '当前状态',
+        v: snap.sourceText + ' · 更新于 ' + snap.lastUpdateText
+      }
+      this.aiConfig = aiConfig
+
+      const s = snap.summary
+      this.footer = '本轮覆盖：已完成 ' + s.counts.done + ' / ' + s.total +
+        '，阻塞 ' + s.counts.blocked + '，离线 ' + s.counts.offline +
+        '。当前数据源为「' + snap.sourceText + '」，可在桌面点击数据源标签切换。'
+    },
+
+    goVoice() {
+      router.push({ uri: '/voice' })
+    },
+
+    goBack() {
+      router.back()
+    }
+  }
+</script>
