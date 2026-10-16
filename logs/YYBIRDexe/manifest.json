@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "team_id": "contest2026_496_diaochabingtuan",
   "github_login": "YYBIRDexe",
-  "generator": "codex-rollout-faithful-transcriber@1.0 (contest-log-collector v1.3.0 的 codex 通道不可用)",
-  "updated_at": "2026-09-20T12:59:37.734Z",
+  "generator": "codex-rollout-project-hook@1.0",
+  "updated_at": "2026-10-16T10:48:59.833Z",
   "sessions": [
     {
       "session_id": "01a0a4da-72d6-72d3-af23-6ddf0ce9bb70",
@@ -468,6 +468,26 @@
       "tokens_total": 468812,
       "health": "ok",
       "data_completeness_warning": "由 Codex rollout 忠实转录生成（官方采集器 v1.3.0 的 --tool codex 通道实测产出 0 事件，其事件展开器仅实现 Claude Code 的 transcript 结构）。内容逐字来自原始 rollout，未增删改写；仅做官方同款脱敏。"
+    },
+    {
+      "session_id": "01a13f74-012e-75a3-8938-6f5c3bf4d8fb",
+      "tool": "codex",
+      "started_at": "2026-10-15T12:06:43.828Z",
+      "last_event_at": "2026-10-16T10:48:49.635Z",
+      "event_count": 687,
+      "file_path": "logs/YYBIRDexe/2026-10-15/codex__01a13f74-012e-75a3-8938-6f5c3bf4d8fb.jsonl",
+      "collection_mode": "cli",
+      "data_completeness_warning": "由本机 Git hook 从本项目工作区的 Codex rollout 转录；包含用户/助手对话与工具事件，跳过 system/developer 环境提示及回显平台提示的工具输出，凭证已脱敏。"
+    },
+    {
+      "session_id": "01a13fa5-5c60-78c1-8f19-6f8d4c0c466b",
+      "tool": "codex",
+      "started_at": "2026-10-15T13:03:37.424Z",
+      "last_event_at": "2026-10-15T13:17:04.847Z",
+      "event_count": 96,
+      "file_path": "logs/YYBIRDexe/2026-10-15/codex__01a13fa5-5c60-78c1-8f19-6f8d4c0c466b.jsonl",
+      "collection_mode": "cli",
+      "data_completeness_warning": "由本机 Git hook 从本项目工作区的 Codex rollout 转录；包含用户/助手对话与工具事件，跳过 system/developer 环境提示及回显平台提示的工具输出，凭证已脱敏。"
     }
   ]
 }
