@@ -1,0 +1,13 @@
+# 运行时产生的数据（由 M1 或 tools/simulate-m1.js 写入），不入库
+data/state.json
+data/state.json.tmp
+data/commands.log
+
+# 预览截图与临时产物
+preview/_*.png
+
+# 依赖与系统文件
+node_modules/
+.DS_Store
+Thumbs.db
+*.swp

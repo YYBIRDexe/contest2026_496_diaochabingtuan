@@ -1,0 +1,106 @@
+{
+  "request": {
+    "formation": "square",
+    "spacing_m": 0.5,
+    "center": null,
+    "heading_rad": null,
+    "assignment": "auto"
+  },
+  "targets": {
+    "robot1": [
+      -2.3190468630367578,
+      -0.636886168057375
+    ],
+    "robot2": [
+      -2.272613831942625,
+      -0.1390468630367576
+    ],
+    "robot3": [
+      -2.8168861680573754,
+      -0.5904531369632424
+    ],
+    "robot4": [
+      -2.7704531369632424,
+      -0.09261383194262504
+    ]
+  },
+  "slots": {
+    "robot1": 3,
+    "robot2": 2,
+    "robot3": 0,
+    "robot4": 1
+  },
+  "steps": [
+    {
+      "robot_id": "robot2",
+      "waypoints": [
+        [
+          -2.3707949192431124,
+          0.121
+        ]
+      ],
+      "purpose": "separate"
+    },
+    {
+      "robot_id": "robot1",
+      "waypoints": [
+        [
+          -2.4582893218813453,
+          -0.8417106781186547
+        ]
+      ],
+      "purpose": "separate"
+    },
+    {
+      "robot_id": "robot4",
+      "waypoints": [
+        [
+          -2.6207106781186544,
+          -0.14228932188134524
+        ]
+      ],
+      "purpose": "separate"
+    },
+    {
+      "robot_id": "robot3",
+      "waypoints": [
+        [
+          -2.8168861680573754,
+          -0.5904531369632424
+        ]
+      ],
+      "purpose": "reconfigure"
+    },
+    {
+      "robot_id": "robot1",
+      "waypoints": [
+        [
+          -2.3190468630367578,
+          -0.636886168057375
+        ]
+      ],
+      "purpose": "reconfigure"
+    },
+    {
+      "robot_id": "robot4",
+      "waypoints": [
+        [
+          -2.7704531369632424,
+          -0.09261383194262504
+        ]
+      ],
+      "purpose": "reconfigure"
+    },
+    {
+      "robot_id": "robot2",
+      "waypoints": [
+        [
+          -2.272613831942625,
+          -0.1390468630367576
+        ]
+      ],
+      "purpose": "reconfigure"
+    }
+  ],
+  "final_separation_m": 0.5000000000000001
+}

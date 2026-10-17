@@ -1,0 +1,91 @@
+{
+  "recorded_at": "2026-09-18",
+  "purpose": "offline snapshot and prototype; no deployment",
+  "files": [
+    {
+      "path": "evidence/classroom.pgm",
+      "sha256": "f2df8f26e080f4779e78aee2f7c41ce320a7bb5b49f36b36ca7880837c2079e0",
+      "bytes": 91519
+    },
+    {
+      "path": "evidence/classroom.yaml",
+      "sha256": "bf2743992a556f081427bff3fbb38b79298519299c2d7f93ecae1a638c4c8544",
+      "bytes": 127
+    },
+    {
+      "path": "evidence/scan_overlay.png",
+      "sha256": "f9613912e62048a271718583c0e1db1178d1e56c953fbdddcc560d30e1a2098e",
+      "bytes": 130051
+    },
+    {
+      "path": "prototype/example_state.json",
+      "sha256": "704f873db3ce7c09715bc83b979991e6dfad5a025be2db295886852a5fe57d3d",
+      "bytes": 222
+    },
+    {
+      "path": "prototype/formation_planner.py",
+      "sha256": "682481b5dc93736191753edaee357650c3340322ebfd1a938ee766df47a9b76b",
+      "bytes": 18722
+    },
+    {
+      "path": "prototype/offline_plan.py",
+      "sha256": "aab61a91d6170a4cb6f3f4ffed20c736216a21b0385c46d5fe89e38e8504819b",
+      "bytes": 1248
+    },
+    {
+      "path": "prototype/reconfiguration_session.py",
+      "sha256": "ecff100b3fa65129388e78dc0b0af34eea2d646b14058931c59c2f499986e42a",
+      "bytes": 7937
+    },
+    {
+      "path": "prototype/square_plan.json",
+      "sha256": "4b56eda2d4b22afba233daefb40794ba34302025ba4f8ea100ddf14fcd232af0",
+      "bytes": 1974
+    },
+    {
+      "path": "prototype/test_reconfiguration.py",
+      "sha256": "74d03826773b959a7dd950689790cf8489d67f8f28ef627b300e31fd76cf3d30",
+      "bytes": 3563
+    },
+    {
+      "path": "README.md",
+      "sha256": "ff5069750beddbbd478ce06caa54b3eab984959cfbf110d201fffedba2f8cef1",
+      "bytes": 5324
+    },
+    {
+      "path": "snapshot/agent.py",
+      "sha256": "e0aeed8c656042fa03cfc1b689cf529cb44754f8723b70bd61ab5f3e66ab68dc",
+      "bytes": 9631
+    },
+    {
+      "path": "snapshot/cmd_vel_watchdog.py",
+      "sha256": "5dd67c1bee62a8b730b4e4c9aa8214b2fd0ffbf007f95021610c361aaae4f4ed",
+      "bytes": 2506
+    },
+    {
+      "path": "snapshot/command_bridge.py",
+      "sha256": "c084e2da77fd1eba1c9d08d8c2f9f10eab7a10a6cf16ac2a66ed172ca72d2dc9",
+      "bytes": 6693
+    },
+    {
+      "path": "snapshot/command_gate.py",
+      "sha256": "2c51c39d43f2af12d089cfc1ebb1e2b74d6b6277441ade07d48d351ce1c25ee0",
+      "bytes": 3175
+    },
+    {
+      "path": "snapshot/formation_once.py",
+      "sha256": "7a3679156901bd3f37081e5987336971d70cfbddba29e9c7c367b5248df181f7",
+      "bytes": 13743
+    },
+    {
+      "path": "snapshot/mentorpi.json",
+      "sha256": "dbdb93513d13c14cecff33cdff2cf4b595a1b0d4d6e22dc0243018f8957b514b",
+      "bytes": 2103
+    },
+    {
+      "path": "snapshot/mentorpi_agent.py",
+      "sha256": "920146f0015b03a4eeb677e4852000726ed9fd8e15970b644caf1b74265f809b",
+      "bytes": 32464
+    }
+  ]
+}

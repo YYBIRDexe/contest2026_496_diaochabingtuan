@@ -1,0 +1,19 @@
+[Unit]
+Description=Distributed CZ225 MentorPi formation agent for %i
+After=network-online.target docker.service mentorpi-localization.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/default/openvela-formation
+ExecStart=/opt/openvela-formation/scripts/run_formation_agent.sh %i
+KillSignal=SIGINT
+TimeoutStopSec=8
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+

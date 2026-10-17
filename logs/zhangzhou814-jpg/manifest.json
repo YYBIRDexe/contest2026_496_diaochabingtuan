@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "team_id": "contest2026_496_diaochabingtuan",
+  "github_login": "zhangzhou814-jpg",
+  "generator": "codex-rollout-project-hook@1.0",
+  "updated_at": "2026-10-16T13:10:18.237Z",
+  "sessions": [
+    {
+      "session_id": "01a13f74-012e-75a3-8938-6f5c3bf4d8fb",
+      "tool": "codex",
+      "started_at": "2026-10-15T12:06:43.828Z",
+      "last_event_at": "2026-10-16T13:10:16.093Z",
+      "event_count": 1011,
+      "file_path": "logs/zhangzhou814-jpg/2026-10-15/codex__01a13f74-012e-75a3-8938-6f5c3bf4d8fb.jsonl",
+      "collection_mode": "cli",
+      "data_completeness_warning": "由本机 Git hook 从本项目工作区的 Codex rollout 转录；包含用户/助手对话与工具事件，跳过 system/developer 环境提示及回显平台提示的工具输出，凭证已脱敏。"
+    },
+    {
+      "session_id": "01a13fa5-5c60-78c1-8f19-6f8d4c0c466b",
+      "tool": "codex",
+      "started_at": "2026-10-15T13:03:37.424Z",
+      "last_event_at": "2026-10-15T13:17:04.847Z",
+      "event_count": 96,
+      "file_path": "logs/zhangzhou814-jpg/2026-10-15/codex__01a13fa5-5c60-78c1-8f19-6f8d4c0c466b.jsonl",
+      "collection_mode": "cli",
+      "data_completeness_warning": "由本机 Git hook 从本项目工作区的 Codex rollout 转录；包含用户/助手对话与工具事件，跳过 system/developer 环境提示及回显平台提示的工具输出，凭证已脱敏。"
+    }
+  ]
+}

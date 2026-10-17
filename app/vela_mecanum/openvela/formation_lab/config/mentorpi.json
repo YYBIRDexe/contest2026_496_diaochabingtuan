@@ -1,0 +1,40 @@
+{
+  "platform": "Hiwonder MentorPi Raspberry Pi 5 mecanum",
+  "hardware_output_enabled": false,
+  "control_mode": "anchored",
+  "consensus_graph": {
+    "name": "ring_virtual_leader",
+    "edges": [["Robot01", "Robot02"], ["Robot02", "Robot03"], ["Robot03", "Robot04"], ["Robot04", "Robot01"]],
+    "pinning": {"Robot01": 1.0}
+  },
+  "frame_convention": "ROS REP-103: x forward, y left, yaw counter-clockwise",
+  "mission_topic": "/formation/mission",
+  "agent_status_topic": "/formation/agent_status",
+  "control_hz": 20.0,
+  "peer_timeout_s": 0.7,
+  "odom_timeout_s": 0.5,
+  "shared_map_frame": "map",
+  "max_xy_variance_m2": 0.25,
+  "max_yaw_variance_rad2": 0.25,
+  "lidar_guard": {
+    "enabled": true,
+    "scan_timeout_s": 0.5,
+    "stop_distance_m": 0.4,
+    "slow_distance_m": 0.8,
+    "sector_half_angle_deg": 30.0,
+    "rotation_stop_distance_m": 0.3
+  },
+  "localization_requirement": "Every pose_topic must be AMCL PoseWithCovarianceStamped in the shared map frame; odom_topic supplies only body velocity",
+  "limits": {
+    "max_linear_mps": 0.65,
+    "max_angular_radps": 1.5,
+    "arena_half_extent_m": 3.0,
+    "min_distance_m": 0.25
+  },
+  "robots": {
+    "Robot01": {"cmd_vel_topic": "/robot01/controller/cmd_vel", "odom_topic": "/robot01/odom", "pose_topic": "/robot01/amcl_pose", "scan_topic": "/robot01/scan_raw"},
+    "Robot02": {"cmd_vel_topic": "/robot02/controller/cmd_vel", "odom_topic": "/robot02/odom", "pose_topic": "/robot02/amcl_pose", "scan_topic": "/robot02/scan_raw"},
+    "Robot03": {"cmd_vel_topic": "/robot03/controller/cmd_vel", "odom_topic": "/robot03/odom", "pose_topic": "/robot03/amcl_pose", "scan_topic": "/robot03/scan_raw"},
+    "Robot04": {"cmd_vel_topic": "/robot04/controller/cmd_vel", "odom_topic": "/robot04/odom", "pose_topic": "/robot04/amcl_pose", "scan_topic": "/robot04/scan_raw"}
+  }
+}

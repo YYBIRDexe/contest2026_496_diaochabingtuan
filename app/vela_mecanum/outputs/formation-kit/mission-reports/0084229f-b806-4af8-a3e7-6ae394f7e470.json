@@ -1,0 +1,64 @@
+{
+  "mission_id": "0084229f-b806-4af8-a3e7-6ae394f7e470",
+  "mission": "square-turn",
+  "elapsed_s": 40.969,
+  "motion_elapsed_s": 22.812,
+  "paused_count": 1,
+  "minimum_gap_m": 0.4845,
+  "position_error_m": {
+    "robot1": 0.0266,
+    "robot2": 0.0162,
+    "robot3": 0.021,
+    "robot4": 0.0164
+  },
+  "yaw_error_rad": {
+    "robot1": 0.0115,
+    "robot2": 0.0108,
+    "robot3": 0.0016,
+    "robot4": 0.0028
+  },
+  "final_pose": {
+    "robot1": {
+      "x": 1.4222,
+      "y": 1.1682,
+      "yaw": 1.6441
+    },
+    "robot2": {
+      "x": 0.9023,
+      "y": 1.6294,
+      "yaw": 1.6448
+    },
+    "robot3": {
+      "x": 0.9395,
+      "y": 1.1258,
+      "yaw": 1.6572
+    },
+    "robot4": {
+      "x": 1.4039,
+      "y": 1.6729,
+      "yaw": 1.6528
+    }
+  },
+  "target": {
+    "robot1": {
+      "x": 1.4385,
+      "y": 1.1891,
+      "yaw": 1.6556
+    },
+    "robot2": {
+      "x": 0.8979,
+      "y": 1.645,
+      "yaw": 1.6556
+    },
+    "robot3": {
+      "x": 0.9403,
+      "y": 1.1468,
+      "yaw": 1.6556
+    },
+    "robot4": {
+      "x": 1.3961,
+      "y": 1.6873,
+      "yaw": 1.6556
+    }
+  }
+}

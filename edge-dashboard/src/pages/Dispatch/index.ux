@@ -1,0 +1,440 @@
+<template>
+  <div class="screen">
+    <!-- ============ 标题栏 ============ -->
+    <div class="topbar">
+      <div class="back" onclick="goBack">
+        <text class="back-text">返回</text>
+      </div>
+      <text class="topbar-title">巡检调度台</text>
+      <div class="chip">
+        <text class="chip-text">{{headline}}</text>
+      </div>
+    </div>
+
+    <div class="body">
+      <!-- ============ 左：4 台车辆的状态卡 ============ -->
+      <div class="left">
+        <text class="section-title">车辆与区域</text>
+        <div class="cars">
+          <div class="car" for="{{cars}}">
+            <div class="car-head">
+              <text class="car-id">{{$item.id}}</text>
+              <div class="dot" style="{{$item.dotStyle}}"></div>
+              <text class="car-link" style="{{$item.linkStyle}}">{{$item.link}}</text>
+            </div>
+            <text class="car-zone">{{$item.zone}} · {{$item.ip}}</text>
+            <text class="car-meta">电量 {{$item.batteryText}}</text>
+          </div>
+        </div>
+
+        <div class="note">
+          <text class="note-title">异常闭环提示</text>
+          <text class="note-text">{{alertText}}</text>
+        </div>
+      </div>
+
+      <!-- ============ 右：任务清单与操作 ============ -->
+      <div class="right">
+        <text class="section-title">本轮任务清单</text>
+        <div class="tasks">
+          <div class="task" for="{{zones}}">
+            <div class="task-line">
+              <text class="task-zone">{{$item.name}}</text>
+              <div class="badge" style="{{$item.badgeStyle}}">
+                <text class="badge-text" style="{{$item.badgeTextStyle}}">{{$item.statusText}}</text>
+              </div>
+            </div>
+            <text class="task-detail">{{$item.detail}}</text>
+            <div class="task-foot">
+              <text class="task-route">{{$item.route}} · {{$item.car}}</text>
+              <text class="task-progress">进度 {{$item.progress}}%</text>
+            </div>
+            <div class="actions">
+              <div class="btn btn-primary" tid="{{$item.id}}" onclick="onDispatch">
+                <text class="btn-text-primary">派单</text>
+              </div>
+              <div class="btn" tid="{{$item.id}}" onclick="onCancel">
+                <text class="btn-text">取消</text>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 底部批量操作 ============ -->
+    <div class="footer">
+      <div class="dock-btn dock-primary" onclick="onStartAll">
+        <text class="dock-text-primary">开始本轮巡检</text>
+      </div>
+      <div class="dock-btn" onclick="onCancelAll">
+        <text class="dock-text">一键取消全部</text>
+      </div>
+      <text class="footer-hint">派单报文：任务序号 / 目标车辆 / 区域路线编号 / 取消标记</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  .screen {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 18px 22px 18px 22px;
+    background-color: #0b1220;
+  }
+
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: 62px;
+    margin-bottom: 12px;
+  }
+  .back {
+    justify-content: center;
+    align-items: center;
+    height: 48px;
+    padding: 0px 24px 0px 24px;
+    border-radius: 24px;
+    background-color: #16223a;
+  }
+  .back-text {
+    font-size: 23px;
+    color: #cbd5e1;
+  }
+  .topbar-title {
+    flex: 1;
+    font-size: 30px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 18px;
+  }
+  .chip {
+    padding: 8px 18px 8px 18px;
+    border-radius: 20px;
+    background-color: #1d2a44;
+  }
+  .chip-text {
+    font-size: 21px;
+    color: #a9c1e0;
+  }
+
+  .body {
+    flex: 1;
+    flex-direction: row;
+    width: 100%;
+  }
+
+  /* ---------- 左栏 ---------- */
+  .left {
+    flex-direction: column;
+    width: 480px;
+    margin-right: 24px;
+  }
+  .section-title {
+    font-size: 26px;
+    color: #7d8ea8;
+    margin-bottom: 12px;
+  }
+  .cars {
+    flex-direction: column;
+    width: 100%;
+  }
+  .car {
+    flex-direction: column;
+    width: 100%;
+    padding: 14px 18px 14px 18px;
+    margin-bottom: 12px;
+    border-radius: 20px;
+    background-color: #16223a;
+  }
+  .car-head {
+    flex-direction: row;
+    align-items: center;
+  }
+  .car-id {
+    font-size: 25px;
+    font-weight: bold;
+    color: #e2e8f0;
+  }
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    margin-left: 12px;
+  }
+  .car-link {
+    font-size: 20px;
+    margin-left: 8px;
+  }
+  .car-zone {
+    font-size: 21px;
+    color: #8fa3bf;
+    margin-top: 6px;
+  }
+  .car-meta {
+    font-size: 20px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+  .note {
+    flex-direction: column;
+    width: 100%;
+    padding: 16px 18px 16px 18px;
+    border-radius: 20px;
+    background-color: rgba(255, 107, 107, 0.12);
+  }
+  .note-title {
+    font-size: 22px;
+    font-weight: bold;
+    color: #ff9b9b;
+  }
+  .note-text {
+    font-size: 21px;
+    color: #d9a2a2;
+    margin-top: 6px;
+  }
+
+  /* ---------- 右栏 ---------- */
+  .right {
+    flex: 1;
+    flex-direction: column;
+  }
+  .tasks {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .task {
+    flex-direction: column;
+    width: 640px;
+    padding: 20px 22px 18px 22px;
+    margin: 0px 20px 18px 0px;
+    border-radius: 26px;
+    background-color: #16223a;
+  }
+  .task-line {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .task-zone {
+    font-size: 27px;
+    font-weight: bold;
+    color: #e2e8f0;
+  }
+  .badge {
+    padding: 5px 14px 5px 14px;
+    border-radius: 16px;
+  }
+  .badge-text {
+    font-size: 20px;
+  }
+  .task-detail {
+    font-size: 21px;
+    color: #8fa3bf;
+    margin-top: 8px;
+  }
+  .task-foot {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .task-route {
+    font-size: 20px;
+    color: #64748b;
+  }
+  .task-progress {
+    font-size: 20px;
+    color: #64748b;
+  }
+  .actions {
+    flex-direction: row;
+    margin-top: 12px;
+  }
+  .btn {
+    justify-content: center;
+    align-items: center;
+    height: 48px;
+    padding: 0px 26px 0px 26px;
+    margin-right: 12px;
+    border-radius: 24px;
+    background-color: #23324f;
+  }
+  .btn-primary {
+    background-color: #2f6df6;
+  }
+  .btn-text {
+    font-size: 22px;
+    color: #cbd5e1;
+  }
+  .btn-text-primary {
+    font-size: 22px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+
+  /* ---------- 底部 ---------- */
+  .footer {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 76px;
+    padding: 0px 20px 0px 20px;
+    border-radius: 24px;
+    background-color: #16223a;
+  }
+  .dock-btn {
+    justify-content: center;
+    align-items: center;
+    height: 52px;
+    padding: 0px 26px 0px 26px;
+    margin-right: 14px;
+    border-radius: 26px;
+    background-color: #23324f;
+  }
+  .dock-primary {
+    background-color: #2f6df6;
+  }
+  .dock-text {
+    font-size: 23px;
+    color: #cbd5e1;
+  }
+  .dock-text-primary {
+    font-size: 23px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  .footer-hint {
+    flex: 1;
+    font-size: 19px;
+    color: #64748b;
+    text-align: right;
+  }
+</style>
+
+<script>
+  import router from '@system.router'
+  import prompt from '@system.prompt'
+  import store from '../../common/store.js'
+  import source from '../../common/source.js'
+
+  export default {
+    private: {
+      headline: '—',
+      alertText: '—',
+      cars: [],
+      zones: []
+    },
+
+    onInit() {
+      this.refresh()
+      const self = this
+      source.onUpdate(function () {
+        self.refresh()
+      })
+    },
+
+    onShow() {
+      this.refresh()
+    },
+
+    onRefresh() {
+      this.refresh()
+    },
+
+    refresh() {
+      const snap = source.get()
+      if (!snap) {
+        this.headline = '正在连接数据源…'
+        return
+      }
+
+      const cars = snap.cars.map(function (c) {
+        return Object.assign({}, c, {
+          dotStyle: 'background-color: ' + (c.online ? '#3ddc84' : '#fbbf24'),
+          linkStyle: 'color: ' + (c.online ? '#3ddc84' : '#fbbf24'),
+          batteryText: c.online ? c.battery + '%' : '—'
+        })
+      })
+      this.cars = cars
+
+      const zones = snap.zones.map(function (z) {
+        const st = store.statusOf(z.status)
+        return Object.assign({}, z, {
+          badgeStyle: 'background-color: ' + st.bg,
+          badgeTextStyle: 'color: ' + st.color
+        })
+      })
+      this.zones = zones
+
+      const s = snap.summary
+      this.headline = '已完成 ' + s.counts.done + ' / ' + s.total +
+        ' · 阻塞 ' + s.counts.blocked + ' · 离线 ' + s.counts.offline
+
+      const blocked = zones.filter(function (z) {
+        return z.status === 'blocked'
+      })
+      if (blocked.length > 0) {
+        this.alertText = blocked[0].name + '：' + blocked[0].detail +
+          '。可按「一键取消全部」撤下未完成任务后重派。'
+      } else {
+        this.alertText = '当前没有待处理异常。'
+      }
+    },
+
+    zoneIdOf(e) {
+      return e && e.target && e.target.attr ? e.target.attr.tid : ''
+    },
+
+    /** 统一处理指令返回：可能是同步结果（演示）或 Promise（真实链路） */
+    handle(result) {
+      const self = this
+      Promise.resolve(result).then(function (r) {
+        prompt.showToast({ message: r && r.message ? r.message : '已下发', duration: 2000 })
+        self.refresh()
+      })
+    },
+
+    onDispatch(e) {
+      const id = this.zoneIdOf(e)
+      this.handle(source.dispatch(id))
+    },
+
+    onCancel(e) {
+      const id = this.zoneIdOf(e)
+      this.handle(source.cancel(id))
+    },
+
+    onStartAll() {
+      const zones = this.zones.filter(function (z) {
+        return z.status === 'idle' || z.status === 'blocked'
+      })
+      const self = this
+      if (zones.length === 0) {
+        prompt.showToast({ message: '没有待派发的任务', duration: 2000 })
+        return
+      }
+      Promise.all(zones.map(function (z) {
+        return Promise.resolve(source.dispatch(z.id))
+      })).then(function (rs) {
+        const ok = rs.filter(function (r) {
+          return r && r.ok
+        }).length
+        prompt.showToast({
+          message: '已派发 ' + ok + ' / ' + zones.length + ' 个任务',
+          duration: 2500
+        })
+        self.refresh()
+      })
+    },
+
+    onCancelAll() {
+      this.handle(source.cancelAll())
+    },
+
+    goBack() {
+      router.back()
+    }
+  }
+</script>

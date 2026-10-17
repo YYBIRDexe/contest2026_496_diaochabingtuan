@@ -1,0 +1,434 @@
+{
+  "round": 1,
+  "status": "done",
+  "startedAt": "2026-09-20T18:26:28",
+  "finishedAt": "2026-09-20T18:27:05",
+  "zones": {
+    "Z1": {
+      "id": "Z1",
+      "zoneName": "入口大厅",
+      "routeName": "入口 → 前台 → 闸机",
+      "car": "1",
+      "ip": "192.168.1.201",
+      "battery": 100,
+      "online": true,
+      "status": "blocked",
+      "progress": 75,
+      "leg": 3,
+      "stepIndex": 3,
+      "stepTotal": 4,
+      "stepLabel": "回到起点",
+      "detail": "回到起点：退出码 9：运动指令已拒绝：距离不足，执行已被否定",
+      "steps": [
+        {
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.9,
+          "deg": 0,
+          "dwell": 0.5,
+          "shape": "Z 字形（一轴 + 掉头）"
+        },
+        {
+          "id": "AD2",
+          "label": "转向下一段",
+          "op": "turn_right",
+          "m": 0,
+          "deg": 90,
+          "dwell": 0.5
+        },
+        {
+          "id": "AD3",
+          "label": "展台 1",
+          "op": "strafe_right",
+          "m": 0.9,
+          "deg": 0,
+          "dwell": 0.5
+        },
+        {
+          "id": "AD4",
+          "label": "回到起点",
+          "op": "turn_left",
+          "m": 0,
+          "deg": 90,
+          "dwell": 0.5
+        }
+      ],
+      "clearance": {
+        "forward": 1.255,
+        "back": 10.069,
+        "strafe_left": 0.856,
+        "strafe_right": 0.378
+      },
+      "stepLog": [
+        {
+          "step": 1,
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.9,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.893,
+          "odom_moved_m": 0.893,
+          "yaw_drift_deg": 0.12,
+          "at": "2026-09-20T18:26:39"
+        },
+        {
+          "step": 2,
+          "id": "AD2",
+          "label": "转向下一段",
+          "op": "turn_right",
+          "m": 0,
+          "ok": true,
+          "note": "完成",
+          "measured_m": -89.4,
+          "odom_moved_m": 0.0,
+          "yaw_drift_deg": -89.47,
+          "at": "2026-09-20T18:26:46"
+        },
+        {
+          "step": 3,
+          "id": "AD3",
+          "label": "展台 1",
+          "op": "strafe_right",
+          "m": 0.9,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.892,
+          "odom_moved_m": 0.892,
+          "yaw_drift_deg": 0.46,
+          "at": "2026-09-20T18:26:57"
+        },
+        {
+          "step": 4,
+          "id": "AD4",
+          "label": "回到起点",
+          "op": "turn_left",
+          "m": 0,
+          "ok": false,
+          "note": "退出码 9：运动指令已拒绝：距离不足，执行已被否定",
+          "measured_m": null,
+          "odom_moved_m": 0.0,
+          "yaw_drift_deg": 0.09,
+          "at": "2026-09-20T18:27:04"
+        }
+      ],
+      "startedAt": "2026-09-20T18:26:28",
+      "finishedAt": "2026-09-20T18:27:04",
+      "odomStart": [
+        0.4201547091432294,
+        5.8073880920519745,
+        67.6938879052827
+      ],
+      "odomEnd": null,
+      "reason": "obstacle"
+    },
+    "Z2": {
+      "id": "Z2",
+      "zoneName": "主通道",
+      "routeName": "通道 A 段 → B 段（全程直行）",
+      "car": "2",
+      "ip": "192.168.1.202",
+      "battery": 100,
+      "online": true,
+      "status": "done",
+      "progress": 100,
+      "leg": 1,
+      "stepIndex": 0,
+      "stepTotal": 1,
+      "stepLabel": "巡检起点",
+      "detail": "路线执行完毕，未发现异常",
+      "steps": [
+        {
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.79,
+          "deg": 0,
+          "dwell": 0.5,
+          "shape": "单向前扫（其余三个方向被占，不回起点）"
+        }
+      ],
+      "clearance": {
+        "forward": 0.99,
+        "back": 8.223,
+        "strafe_left": 0.226,
+        "strafe_right": 0.217
+      },
+      "stepLog": [
+        {
+          "step": 1,
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.79,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.783,
+          "odom_moved_m": 0.783,
+          "yaw_drift_deg": -0.02,
+          "at": "2026-09-20T18:26:38"
+        }
+      ],
+      "startedAt": "2026-09-20T18:26:28",
+      "finishedAt": "2026-09-20T18:26:38",
+      "odomStart": [
+        -2.8232307991705805,
+        3.9703413771318865,
+        131.2775141162094
+      ],
+      "odomEnd": [
+        -3.3387072704697176,
+        4.559042698321229,
+        131.23114404868858
+      ]
+    },
+    "Z3": {
+      "id": "Z3",
+      "zoneName": "展项区",
+      "routeName": "展台 1 → 展台 4 绕行",
+      "car": "3",
+      "ip": "192.168.1.203",
+      "battery": 100,
+      "online": true,
+      "status": "done",
+      "progress": 100,
+      "leg": 4,
+      "stepIndex": 3,
+      "stepTotal": 4,
+      "stepLabel": "回到起点",
+      "detail": "路线执行完毕，未发现异常",
+      "steps": [
+        {
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.9,
+          "deg": 0,
+          "dwell": 0.5,
+          "shape": "Z 字形（一轴 + 掉头）"
+        },
+        {
+          "id": "AD2",
+          "label": "转向下一段",
+          "op": "turn_right",
+          "m": 0,
+          "deg": 90,
+          "dwell": 0.5
+        },
+        {
+          "id": "AD3",
+          "label": "展台 1",
+          "op": "strafe_right",
+          "m": 0.9,
+          "deg": 0,
+          "dwell": 0.5
+        },
+        {
+          "id": "AD4",
+          "label": "回到起点",
+          "op": "turn_left",
+          "m": 0,
+          "deg": 90,
+          "dwell": 0.5
+        }
+      ],
+      "clearance": {
+        "forward": 3.741,
+        "back": 1.572,
+        "strafe_left": 0.584,
+        "strafe_right": 0.53
+      },
+      "stepLog": [
+        {
+          "step": 1,
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.9,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.893,
+          "odom_moved_m": 0.893,
+          "yaw_drift_deg": 0.1,
+          "at": "2026-09-20T18:26:38"
+        },
+        {
+          "step": 2,
+          "id": "AD2",
+          "label": "转向下一段",
+          "op": "turn_right",
+          "m": 0,
+          "ok": true,
+          "note": "完成",
+          "measured_m": -88.4,
+          "odom_moved_m": 0.0,
+          "yaw_drift_deg": -88.32,
+          "at": "2026-09-20T18:26:46"
+        },
+        {
+          "step": 3,
+          "id": "AD3",
+          "label": "展台 1",
+          "op": "strafe_right",
+          "m": 0.9,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.893,
+          "odom_moved_m": 0.893,
+          "yaw_drift_deg": 0.1,
+          "at": "2026-09-20T18:26:56"
+        },
+        {
+          "step": 4,
+          "id": "AD4",
+          "label": "回到起点",
+          "op": "turn_left",
+          "m": 0,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 88.7,
+          "odom_moved_m": 0.0,
+          "yaw_drift_deg": 88.94,
+          "at": "2026-09-20T18:27:04"
+        }
+      ],
+      "startedAt": "2026-09-20T18:26:28",
+      "finishedAt": "2026-09-20T18:27:05",
+      "odomStart": [
+        3.7173138394614704,
+        0.7150996780364989,
+        -24.059798886582893
+      ],
+      "odomEnd": [
+        3.7052723112227,
+        0.6881757648936873,
+        -23.067911284866256
+      ]
+    },
+    "Z4": {
+      "id": "Z4",
+      "zoneName": "设备区",
+      "routeName": "配电柜 → 机柜背面",
+      "car": "4",
+      "ip": "192.168.1.204",
+      "battery": 100,
+      "online": true,
+      "status": "done",
+      "progress": 100,
+      "leg": 4,
+      "stepIndex": 3,
+      "stepTotal": 4,
+      "stepLabel": "回到起点",
+      "detail": "路线执行完毕，未发现异常",
+      "steps": [
+        {
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.53,
+          "deg": 0,
+          "dwell": 0.5,
+          "shape": "矩形闭环（四方向，回出发点）"
+        },
+        {
+          "id": "AD2",
+          "label": "转向下一段",
+          "op": "strafe_right",
+          "m": 0.53,
+          "deg": 0,
+          "dwell": 0.5
+        },
+        {
+          "id": "AD3",
+          "label": "展台 1",
+          "op": "back",
+          "m": 0.53,
+          "deg": 0,
+          "dwell": 0.5
+        },
+        {
+          "id": "AD4",
+          "label": "回到起点",
+          "op": "strafe_left",
+          "m": 0.53,
+          "deg": 0,
+          "dwell": 0.5
+        }
+      ],
+      "clearance": {
+        "forward": 1.382,
+        "back": 3.427,
+        "strafe_left": 5.87,
+        "strafe_right": 0.733
+      },
+      "stepLog": [
+        {
+          "step": 1,
+          "id": "AD1",
+          "label": "巡检起点",
+          "op": "forward",
+          "m": 0.53,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.522,
+          "odom_moved_m": 0.522,
+          "yaw_drift_deg": -0.14,
+          "at": "2026-09-20T18:26:36"
+        },
+        {
+          "step": 2,
+          "id": "AD2",
+          "label": "转向下一段",
+          "op": "strafe_right",
+          "m": 0.53,
+          "ok": true,
+          "note": "完成（被雷达拒动后收到 0.37 m 重试成功）",
+          "measured_m": 0.362,
+          "odom_moved_m": 0.362,
+          "yaw_drift_deg": 0.15,
+          "at": "2026-09-20T18:26:45"
+        },
+        {
+          "step": 3,
+          "id": "AD3",
+          "label": "展台 1",
+          "op": "back",
+          "m": 0.53,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.523,
+          "odom_moved_m": 0.523,
+          "yaw_drift_deg": 0.05,
+          "at": "2026-09-20T18:26:53"
+        },
+        {
+          "step": 4,
+          "id": "AD4",
+          "label": "回到起点",
+          "op": "strafe_left",
+          "m": 0.53,
+          "ok": true,
+          "note": "完成",
+          "measured_m": 0.523,
+          "odom_moved_m": 0.523,
+          "yaw_drift_deg": 0.05,
+          "at": "2026-09-20T18:27:01"
+        }
+      ],
+      "startedAt": "2026-09-20T18:26:28",
+      "finishedAt": "2026-09-20T18:27:02",
+      "odomStart": [
+        -0.5021034115315014,
+        1.655720750518076,
+        -165.83234803987472
+      ],
+      "odomEnd": [
+        -0.46142120046765234,
+        1.5014088840991697,
+        -165.65341983193457
+      ]
+    }
+  }
+}

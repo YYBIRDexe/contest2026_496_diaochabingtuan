@@ -1,0 +1,7 @@
+{
+  "llm_host": "10.0.2.2",
+  "llm_path": "/v1/chat/completions",
+  "llm_port": "8765",
+  "model": "formation-local-stub",
+  "api_key": "local-only"
+}

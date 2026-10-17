@@ -1,0 +1,15 @@
+[Unit]
+Description=openvela high-level formation mission gateway
+After=network-online.target formation-lab.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vela/formation-lab
+Environment=PYTHONPATH=/home/vela/formation-lab
+ExecStart=/usr/bin/python3 -m formation_lab.mission_gateway --config /home/vela/formation-lab/config/mentorpi.json
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

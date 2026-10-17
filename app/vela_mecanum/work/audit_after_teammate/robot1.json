@@ -1,0 +1,57 @@
+{
+  "time": {
+    "stdout": "2026-09-18T05:25:01+08:00\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "services": {
+    "stdout": "inactive\ninactive\ninactive\ninactive\ninactive\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "units": {
+    "stdout": "# /etc/systemd/system/formation-agent@.service\n[Unit]\nDescription=Distributed CZ225 MentorPi formation agent for %i\nAfter=network-online.target docker.service mentorpi-localization.service\nWants=network-online.target docker.service\n\n[Service]\nType=simple\nUser=root\nGroup=root\nEnvironmentFile=/etc/default/openvela-formation\nExecStart=/opt/openvela-formation/scripts/run_formation_agent.sh %i\nKillSignal=SIGINT\nTimeoutStopSec=8\nRestart=on-failure\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n\n\n# /etc/systemd/system/formation-command-bridge@.service\n[Unit]\nDescription=Locked formation command bridge for %i\nRequires=docker.service start_node.service\nAfter=docker.service start_node.service\n\n[Service]\nType=simple\nUser=pi\nExecStart=/opt/openvela-formation/scripts/run_command_bridge.sh %i\nExecStopPost=/opt/openvela-formation/scripts/stop_command_bridge.sh %i\nRestart=always\nRestartSec=1\n\n[Install]\nWantedBy=multi-user.target\n\n# /etc/systemd/system/formation-reconfiguration.service\n[Unit]\nDescription=Four-car formation reconfiguration coordinator\nRequires=docker.service\nAfter=docker.service network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=pi\nExecStart=/opt/openvela-formation/scripts/run_reconfiguration_coordinator.sh\nRestart=on-failure\nRestartSec=2\nKillSignal=SIGINT\nTimeoutStopSec=8\n\n[Install]\nWantedBy=multi-user.target\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "versions": {
+    "stdout": "7eb69055fbe46c50010a08aa59efa2299bca8fff9f76aa0d84768b75d9f7edd4  /opt/openvela-formation/config/mentorpi.json\n2026-09-17 15:15:01.655977472 +0000 /opt/openvela-formation/config/mentorpi.json\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "launchers": {
+    "stdout": "b0815a34193df92272e609a07488f79f7e877edfe670e3459322b8d53e7776e6  /opt/openvela-formation/scripts/run_formation_agent.sh\n9142dac17b3ee12117067497b56c66dc7c61b82120e37b7fad68ce8a7e118b92  /opt/openvela-formation/scripts/run_reconfiguration_coordinator.sh\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "hardware": {
+    "stdout": "True\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "lease": {
+    "stdout": "present False valid False\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "processes": {
+    "stdout": "    787 python3 command_bridge.py --robot robot1 --local-domain 1 --fleet-domain 42\n    906 python3 /opt/openvela-formation/formation_lab/reconfiguration_ros.py --robot-id robot1 --execute\n    912 python3 /opt/openvela-formation/formation_lab/reconfiguration_agent.py --robot-id robot1\n   1784 /opt/ros/humble/lib/nav2_map_server/map_server --ros-args -r __node:=map_server -r __ns:=/ --params-file /tmp/launch_params_3pvf1vxm\n   1786 /opt/ros/humble/lib/nav2_amcl/amcl --ros-args -r __node:=amcl -r __ns:=/ --params-file /home/ubuntu/ros2_ws/install/mentorpi_formation_bringup/share/mentorpi_formation_bringup/config/amcl.yaml --params-file /tmp/launch_params_lky95q4p -r map:=map -r scan:=scan_raw\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "agent_log": {
+    "stdout": "Started formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\nformation-agent@robot1.service: Main process exited, code=exited, status=137/n/a\nformation-agent@robot1.service: Failed with result 'exit-code'.\nformation-agent@robot1.service: Scheduled restart job, restart counter is at 1.\nStopped formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\nStarted formation-agent@robot1.service - Distributed CZ225 MentorPi formation agent for robot1.\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "bridge_log": {
+    "stdout": "Started formation-command-bridge@robot1.service - Locked formation command bridge for robot1.\nformation-command-bridge@robot1.service: Main process exited, code=exited, status=137/n/a\nformation-command-bridge@robot1.service: Failed with result 'exit-code'.\nformation-command-bridge@robot1.service: Scheduled restart job, restart counter is at 1.\nStopped formation-command-bridge@robot1.service - Locked formation command bridge for robot1.\nStarted formation-command-bridge@robot1.service - Locked formation command bridge for robot1.\ncommand bridge robot1: local=1 fleet=42 locked\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "coordinator_log": {
+    "stdout": "Started formation-reconfiguration.service - Four-car formation reconfiguration coordinator.\nformation-reconfiguration.service: Main process exited, code=exited, status=137/n/a\nformation-reconfiguration.service: Failed with result 'exit-code'.\nformation-reconfiguration.service: Scheduled restart job, restart counter is at 1.\nStopped formation-reconfiguration.service - Four-car formation reconfiguration coordinator.\nStarted formation-reconfiguration.service - Four-car formation reconfiguration coordinator.\n",
+    "stderr": "",
+    "exit": 0
+  }
+}

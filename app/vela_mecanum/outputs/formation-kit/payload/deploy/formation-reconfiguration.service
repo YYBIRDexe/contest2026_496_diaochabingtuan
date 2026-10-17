@@ -1,0 +1,17 @@
+[Unit]
+Description=Four-car formation reconfiguration coordinator
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+ExecStart=/opt/openvela-formation/scripts/run_reconfiguration_coordinator.sh
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=8
+
+[Install]
+WantedBy=multi-user.target

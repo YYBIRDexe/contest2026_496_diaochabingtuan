@@ -1,0 +1,255 @@
+{
+  "version": "2026-09-19",
+  "files": [
+    {
+      "path": "payload/baseline_robot1/agent.py",
+      "sha256": "28b959c150ac95542446d2617d344c5a883c5b9ce2321a0a38cd5328d4a2200f",
+      "bytes": 9632
+    },
+    {
+      "path": "payload/baseline_robot1/cmd_vel_watchdog.py",
+      "sha256": "5dd67c1bee62a8b730b4e4c9aa8214b2fd0ffbf007f95021610c361aaae4f4ed",
+      "bytes": 2506
+    },
+    {
+      "path": "payload/baseline_robot1/command_bridge.py",
+      "sha256": "30ee5722d8bab355cfabeae0054777c6b09e907d7c9abc01d99c5795df74eb6e",
+      "bytes": 7374
+    },
+    {
+      "path": "payload/baseline_robot1/command_gate.py",
+      "sha256": "037f6d1ad77837486965b75e45a31a10ecb5848554b5a2f9511821c8dde8d030",
+      "bytes": 4062
+    },
+    {
+      "path": "payload/baseline_robot1/formation_once.py",
+      "sha256": "7a3679156901bd3f37081e5987336971d70cfbddba29e9c7c367b5248df181f7",
+      "bytes": 13743
+    },
+    {
+      "path": "payload/baseline_robot1/mentorpi.json",
+      "sha256": "01ac7c1651a5e33f1a622eeede190f5a1f8cc93e7e5507f7ad60d6a3b50b7102",
+      "bytes": 2138
+    },
+    {
+      "path": "payload/baseline_robot1/mentorpi_agent.py",
+      "sha256": "ed9369ff121ea3db46c1799d14842b2414800f5c948c26045fc68d41e6c57e26",
+      "bytes": 32467
+    },
+    {
+      "path": "payload/deploy/formation-reconfiguration.service",
+      "sha256": "6bb69898796248683d3152af2898a7a59bd0d5a5c8e1eada92039b2574cdc317",
+      "bytes": 374
+    },
+    {
+      "path": "payload/deploy/run_formation_agent.sh",
+      "sha256": "b0815a34193df92272e609a07488f79f7e877edfe670e3459322b8d53e7776e6",
+      "bytes": 715
+    },
+    {
+      "path": "payload/deploy/run_reconfiguration_coordinator.sh",
+      "sha256": "9142dac17b3ee12117067497b56c66dc7c61b82120e37b7fad68ce8a7e118b92",
+      "bytes": 678
+    },
+    {
+      "path": "payload/docs/pre_autonomy/reconfiguration_agent.py",
+      "sha256": "8be0660b605f5d2b0a26900d64268db2fe1faca4f92a440617312182d2469514",
+      "bytes": 6663
+    },
+    {
+      "path": "payload/docs/pre_teammate/reconfiguration_agent.py",
+      "sha256": "650c8de45fdee302154fe58cee10eb4277dc61389bd7ae563dddfe485277ee2f",
+      "bytes": 6486
+    },
+    {
+      "path": "payload/docs/pre_teammate/reconfiguration_ros.py",
+      "sha256": "778e0b838ef89755c43c4b40b9a2f68e969634f35a6216062d109ecbc328c3a1",
+      "bytes": 6349
+    },
+    {
+      "path": "payload/docs/previous_manifest.json",
+      "sha256": "e7f9cdd19a5e5ee37bdb60bc0df018d3f72174b5495bb4ecb79b0176132e88c3",
+      "bytes": 2929
+    },
+    {
+      "path": "payload/docs/previous_record.md",
+      "sha256": "ff5069750beddbbd478ce06caa54b3eab984959cfbf110d201fffedba2f8cef1",
+      "bytes": 5324
+    },
+    {
+      "path": "payload/evidence/classroom.pgm",
+      "sha256": "f2df8f26e080f4779e78aee2f7c41ce320a7bb5b49f36b36ca7880837c2079e0",
+      "bytes": 91519
+    },
+    {
+      "path": "payload/evidence/classroom.yaml",
+      "sha256": "bf2743992a556f081427bff3fbb38b79298519299c2d7f93ecae1a638c4c8544",
+      "bytes": 127
+    },
+    {
+      "path": "payload/evidence/current_map/classroom.pgm",
+      "sha256": "05ce614449ad830f9a8d082bebfc3bcb289c891d82cffe3ff037b9e12e201ae9",
+      "bytes": 68965
+    },
+    {
+      "path": "payload/evidence/current_map/classroom.yaml",
+      "sha256": "e7a4f40a3ef4b570ed8c0f0d10e4720dd98d4ce494b128ef41b3d0fe5d211cc3",
+      "bytes": 127
+    },
+    {
+      "path": "payload/evidence/current_map/robot1_scan_raw.txt",
+      "sha256": "7b0c5d7662787ee92c528eb05613b8cdc8e1e117f70be3ba95564a5855befbee",
+      "bytes": 10699
+    },
+    {
+      "path": "payload/evidence/current_map/robot2_scan_raw.txt",
+      "sha256": "e7845ead5c5b2d27700663046353f2825fb2e2d0f0f37a598964e71fe1ee14ab",
+      "bytes": 11986
+    },
+    {
+      "path": "payload/evidence/current_map/robot3_scan_raw.txt",
+      "sha256": "abb6428a86af0ceaff6c45931ba20fe2dbab65079bf833a63fa472ab34af828e",
+      "bytes": 11866
+    },
+    {
+      "path": "payload/evidence/current_map/robot4_scan_raw.txt",
+      "sha256": "aa6baeafd883030dedd466282aca3e60174908729680f903ff75b475fd5eb797",
+      "bytes": 12040
+    },
+    {
+      "path": "payload/evidence/raw/map.png",
+      "sha256": "c0543b7a1b3bf8828f55f96dcfe07f21a8bf42bc0baecfecaae79fb22a4fe947",
+      "bytes": 37381
+    },
+    {
+      "path": "payload/evidence/raw/robot1_amcl_pose.txt",
+      "sha256": "2e061b9bd9b314b799d15ec561251d8f6e39a94fae5ae504d80121bb26f2af8f",
+      "bytes": 731
+    },
+    {
+      "path": "payload/evidence/raw/robot1_scan_raw.txt",
+      "sha256": "6b7e5699aefa699edea9fba6b23f31a9d63fb1395373077aee11e31a7feb0881",
+      "bytes": 10540
+    },
+    {
+      "path": "payload/evidence/raw/robot2_amcl_pose.txt",
+      "sha256": "4556162851e6f9c622253465aa1b84cedfcf2aea5194732d3d3dccef88d8df34",
+      "bytes": 729
+    },
+    {
+      "path": "payload/evidence/raw/robot2_scan_raw.txt",
+      "sha256": "1fd13c7c03089e814481df1933218b8d0f2b48a2d9a65cc360ff2e5c9350a9f2",
+      "bytes": 10868
+    },
+    {
+      "path": "payload/evidence/raw/robot3_amcl_pose.txt",
+      "sha256": "579d076c4473f520acf7330b705a601988c25223e699631f8f3c6bebc18f9acd",
+      "bytes": 729
+    },
+    {
+      "path": "payload/evidence/raw/robot3_scan_raw.txt",
+      "sha256": "dd019810ddbf5a4aac632db71b3eb7c6d5e55ca7f62a3fd0a4afabca94ef69a0",
+      "bytes": 11198
+    },
+    {
+      "path": "payload/evidence/raw/robot4_amcl_pose.txt",
+      "sha256": "ca1cb0ac62176f108ffe374d0464586356b5bf73169522321c061ab02adbc495",
+      "bytes": 727
+    },
+    {
+      "path": "payload/evidence/raw/robot4_scan_raw.txt",
+      "sha256": "3cb0f74d2278c04e80c0b35a7b3f18b703b17d88c4edf29371a47bd2f32f2170",
+      "bytes": 11295
+    },
+    {
+      "path": "payload/evidence/scan_overlay.png",
+      "sha256": "f9613912e62048a271718583c0e1db1178d1e56c953fbdddcc560d30e1a2098e",
+      "bytes": 130051
+    },
+    {
+      "path": "payload/planner/auto_localize.py",
+      "sha256": "a234ef7cdabbc85a1adcc4c5baf6cda23a4a3daf41e8f5e776c74cbc493e7cf8",
+      "bytes": 6333
+    },
+    {
+      "path": "payload/planner/example_state.json",
+      "sha256": "704f873db3ce7c09715bc83b979991e6dfad5a025be2db295886852a5fe57d3d",
+      "bytes": 222
+    },
+    {
+      "path": "payload/planner/fleet_endpoint.py",
+      "sha256": "86a08ea33d1c5d4b670e8ff1b31dc68c428669386b1da436b39d6f4b86f2eaca",
+      "bytes": 5321
+    },
+    {
+      "path": "payload/planner/formation_lap.py",
+      "sha256": "9f48a3d7b33e67b9459d48ddbb5afe621b2c9adfd1b9c95f19c51fa68dbf2bd6",
+      "bytes": 6036
+    },
+    {
+      "path": "payload/planner/formation_planner.py",
+      "sha256": "38234344255e7198819557f8ff6c1aaa7117b6f36eaeddcd74e497782c58b366",
+      "bytes": 19843
+    },
+    {
+      "path": "payload/planner/lap_session.py",
+      "sha256": "237d09da7d0ef0fbaebb96598d5e82b41805e6eb370c7206ef73273caa42aba5",
+      "bytes": 5806
+    },
+    {
+      "path": "payload/planner/offline_plan.py",
+      "sha256": "aab61a91d6170a4cb6f3f4ffed20c736216a21b0385c46d5fe89e38e8504819b",
+      "bytes": 1248
+    },
+    {
+      "path": "payload/planner/reconfiguration_agent.py",
+      "sha256": "f73c2b9328faa379fc1f9164521691916998f92cdb80dc6a9b2288ccddee6ee6",
+      "bytes": 15020
+    },
+    {
+      "path": "payload/planner/reconfiguration_ros.py",
+      "sha256": "621548efbf9799e6244d92472211abe1f985ffcf3164a732168e144375e5eef7",
+      "bytes": 7196
+    },
+    {
+      "path": "payload/planner/reconfiguration_session.py",
+      "sha256": "8ab8abcd45b2cf61c166ce4ce537c974448c1089bca2ddedf0f3ef7625b034e7",
+      "bytes": 7967
+    },
+    {
+      "path": "payload/planner/scan_localizer.py",
+      "sha256": "4bb4e0fd041cdaab1960073d837b178d1d96e04859659623e1ad0703eec5c02a",
+      "bytes": 5747
+    },
+    {
+      "path": "payload/planner/simulate_current_map.py",
+      "sha256": "9dce52475bca12763bdc4b94db8e5af41637c095ae1952adfd0dc932f962eb84",
+      "bytes": 3584
+    },
+    {
+      "path": "payload/planner/simulate_formation_lap.py",
+      "sha256": "3476b8a197a3ef6399985bf2891e2483fce10478218a585971d355b9fa3614fd",
+      "bytes": 3384
+    },
+    {
+      "path": "payload/planner/square_plan.json",
+      "sha256": "4b56eda2d4b22afba233daefb40794ba34302025ba4f8ea100ddf14fcd232af0",
+      "bytes": 1974
+    },
+    {
+      "path": "payload/planner/synchronized_formation.py",
+      "sha256": "3cceafabfa98a69ee7ce7bd724a762a4da15e38b1095438c0ca0542a3bac3950",
+      "bytes": 47660
+    },
+    {
+      "path": "payload/planner/test_auto_localize_ros_vm.py",
+      "sha256": "1dc828ba01c829c6f6a7b46618ca61ae77934c76a513bc08e37c72afab15705f",
+      "bytes": 3068
+    },
+    {
+      "path": "payload/planner/test_reconfiguration.py",
+      "sha256": "93179e1287aed349cb5e8eadea1f6ad6422f8b36c40fffbf70d309dae68ff3e2",
+      "bytes": 15254
+    }
+  ]
+}

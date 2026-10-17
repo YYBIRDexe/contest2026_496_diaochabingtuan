@@ -1,0 +1,3816 @@
+/*
+ * app.ux —— openvela 快应用入口
+ * ⚠️ 本文件由 tools/build-openvela.js 从 src/app.ux.tmpl 生成，**请不要直接改这个文件**。
+ *
+ * 结构说明：
+ *   1. 页面层用「单页 + 仓内路由」：六个视图由 app-shell.js 按状态切换，
+ *      **不依赖系统 router 模块**——官方 Feature Framework 的模块清单里
+ *      没有 router 的 JS 模块（只有 C 层的 ApplicationRoute），
+ *      照文档写 `import router from '@system.router'` 在模拟器上不一定能解析。
+ *   2. 脚本层内联打包产物：快应用不认 import 语句，所以所有模块以
+ *      __def / __mod 的形式自带进来（见 build/velaguard.bundle.js）。
+ *   3. `@system.velaclaw` 只能写在快应用自己的脚本里，因此在 bundle 内部完成取值，
+ *      本文件只负责把 ask() 包成 Promise 交给 agent.js。
+ *   4. 点击交互：快应用没有 DOM 事件代理，所以渲染时用 onclick 把节点与动作绑起来
+ *      （由 bundle 内的 bindActions 完成）。
+ */
+import velaclaw from '@system.velaclaw'
+
+/*
+ * 打包产物在最顶层求值一次，句柄挂成模块级常量。
+ *
+ * 为什么不在 boot() 的 try 里求值：那会变成**块级作用域**，
+ * 句柄出不了那个块，后面用不到（第一次生成时就是这么坏的，
+ * 而且因为 try 把错误吞了，表现为"启动失败"而不是语法错）。
+ * 顶层求值还有个好处：产物本身有语法/注册问题时，报错位置更直白。
+ */
+const VelaGuard = (function () {
+  /*
+   * VelaGuard bundle —— **自动生成，请勿手改**
+   *
+   * 由 tools/bundle.js 从 src/ 下的源码生成，目标：openvela
+   * 生成时间：2026-09-20T11:37:11.608Z
+   *
+   * 结构：所有模块注册进 __REG，用 __mod(name) 取用；
+   *      页面里的 import 已改写成 __mod(...)，因此本文件不依赖任何模块加载器。
+   */
+  (function (global) {
+    'use strict';
+    var __REG = {};      /* name → { factory, exports, done } */
+    function __resolve(name) {
+      var r = __REG[name];
+      if (!r) { throw new Error('模块未注册：' + name); }
+      if (!r.done) {
+        /* 先标记再执行，循环依赖时不会无限递归 */
+        r.done = true;
+        r.factory(function (spec) {
+          return __mod(rawName(spec));
+        }, __imp, r, r.exports);
+      }
+      return r.exports;
+    }
+    function rawName(spec) {
+      return String(spec).replace(/^.*\//, "").replace(/\.js$/, "");
+    }
+    function __mod(name) { return __resolve(name); }
+    function __imp(ns) {
+      if (ns && Object.prototype.hasOwnProperty.call(ns, 'default') && ns.default !== undefined) {
+        return ns.default;
+      }
+      return ns;
+    }
+    /* 只登记工厂，不执行 —— 真正的求值推迟到第一次被取用。
+       早期版本在这里就立即执行所有模块，而模块是按名字母序跑的，
+       于是 agent 先跑、它需要的 store 还没注册，直接报"模块未注册"（白屏）。 */
+    function __def(name, fn) {
+      __REG[name] = { factory: fn, exports: {}, done: false };
+    }
+
+    /* ---------- 注册并执行所有模块 ---------- */
+    __def("agent", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 语音助手（快应用 ↔ 端侧 ai_agent）
+   *
+   * 通道结论（都来自竞赛分支源码，不是照文档抄的）：
+   *   · 快应用要跟端侧 Agent 说话，**唯一**官方通道是 `@system.velaclaw.ask()`
+   *     —— IDL：`promise<AskResponse> ask(AskParam)`
+   *        AskResponse = { reply, extra_info, tool_calls: [{name, result}] }
+   *     传输是 POSIX 消息队列（/velaclaw_qapp_in、/velaclaw_qapp_out），
+   *     **不是** WebSocket 28789（快应用侧根本没有 @system.websocket 模块）。
+   *   · 快应用**不能**让 Agent 去调任意工具：桥里的
+   *     `velaclaw_quickapp_bridge_call_tool()` 是个返回 not_implemented 的桩。
+   *     所以「查车/派单」这类动作要靠 Agent 自己按 Skill 去调它的工具，
+   *     本页只负责把问题送进去、把回复和**它调了哪些工具**显示出来。
+   *
+   * 模拟器没有麦克风，所以这一页是**文本对话**：输入框 + 预设问句按钮。
+   * 这比假装有语音更诚实，也不影响 Skill 与工具调用能力的演示。
+   *
+   * 本地兜底：Agent 不可用（没编译进固件 / 没配 LLM / 预览环境）时，
+   * 巡检控制类问句走**本地指令表**直接查 store —— 离线也能答，
+   * 演示不会因为网络或额度失效而卡住。
+   */
+  const store = __imp(__mod("store"));
+  const CFG = __imp(__mod("data"));
+  const HISTORY_MAX = 60
+
+  let history = []
+  let pending = false
+  let agentReady = null   // null=未探测 / true=可用 / false=不可用
+  let lastError = ''
+  let seq = 0
+
+  /* ------------------------------------------------------------------ *
+   * 本地指令表（兜底用；与巡检四个功能一一对应）
+   * ------------------------------------------------------------------ */
+  const LOCAL_RULES = [
+    {
+      name: '开始巡检',
+      keywords: ['开始巡检', '开始本轮', '巡检一下', '检查一下', '开始检查'],
+      run: function () {
+        const meta = store.memoryOfLastRound()
+        const r = store.startRound()
+        let text = r.message + '。'
+        /* 上下文主动：本轮开始前主动提醒上轮未完成的区域 */
+        if (meta) {
+          text += '提醒：' + meta.text
+        }
+        return text
+      }
+    },
+    {
+      name: '查询进度',
+      keywords: ['哪些区域', '没查完', '进度', '查到哪', '巡检状态'],
+      run: function () {
+        const zs = store.zoneStates()
+        const parts = zs.map(function (z) { return z.name + z.statusText })
+        return '当前：' + parts.join('、') + '。'
+      }
+    },
+    {
+      name: '生成汇总',
+      keywords: ['汇总', '报告', '小结', '总结', '覆盖'],
+      run: function () {
+        const r = store.closeRound()
+        return r.message
+      }
+    },
+    {
+      name: '为什么阻塞',
+      keywords: ['为什么', '阻塞', '卡住', '异常'],
+      run: function () {
+        const zs = store.zoneStates()
+        const bad = zs.filter(function (z) {
+          return z.status === 'blocked' || z.status === 'offline'
+        })
+        if (bad.length === 0) {
+          return '本轮没有阻塞或离线的区域。'
+        }
+        return bad.map(function (z) {
+          return z.name + '：' + z.detail
+        }).join('；') + '。'
+      }
+    },
+    {
+      name: '一键取消',
+      keywords: ['取消', '停下', '停止', '别查了'],
+      run: function () {
+        return store.cancelAll().message
+      }
+    },
+    {
+      name: '车队状态',
+      keywords: ['在线', '几台车', '车状态', '电池', '电量'],
+      run: function () {
+        const snap = store.snapshot()
+        const on = snap.cars.filter(function (c) { return c.online })
+        const off = snap.cars.filter(function (c) { return !c.online })
+        let text = on.length + ' / ' + snap.cars.length + ' 台车在线'
+        if (on.length) {
+          text += '（' + on.map(function (c) { return c.name + ' 电量 ' + c.battery + '%' }).join('，') + '）'
+        }
+        if (off.length) {
+          text += '；' + off.map(function (c) { return c.name }).join('、') + ' 离线'
+        }
+        return text + '。'
+      }
+    },
+    {
+      name: '路线说明',
+      keywords: ['路线', '怎么走', '地图', '航点'],
+      run: function () {
+        const parts = CFG.ALL_ROUTE.map(function (rid) {
+          const r = CFG.ROUTES[rid]
+          return r.name + '（' + CFG.routeLength(rid).toFixed(1) + ' 米，' + r.desc + '）'
+        })
+        return '本轮固定路线共 ' + CFG.allRouteLength().toFixed(1) + ' 米：' + parts.join('；') + '。'
+      }
+    }
+  ]
+
+  function tryLocal(q) {
+    const s = String(q || '')
+    for (let i = 0; i < LOCAL_RULES.length; i += 1) {
+      const rule = LOCAL_RULES[i]
+      for (let k = 0; k < rule.keywords.length; k += 1) {
+        if (s.indexOf(rule.keywords[k]) >= 0) {
+          return { matched: rule.name, text: rule.run() }
+        }
+      }
+    }
+    return null
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 消息记录
+   * ------------------------------------------------------------------ */
+  function push(role, text, extra) {
+    seq += 1
+    history.push({
+      id: seq,
+      role: role,          // 'me' | 'agent' | 'sys'
+      text: text,
+      tools: (extra && extra.tools) || [],
+      source: (extra && extra.source) || '',
+      time: (extra && extra.time) || ''
+    })
+    if (history.length > HISTORY_MAX) {
+      history.shift()
+    }
+    return history[history.length - 1]
+  }
+
+  function messages() {
+    return history.map(function (m) {
+      return {
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        tools: m.tools.slice(),
+        toolText: m.tools.length ? ('调用了 ' + m.tools.join('、')) : '',
+        source: m.source,
+        time: m.time
+      }
+    })
+  }
+
+  function isPending() {
+    return pending
+  }
+
+  function status() {
+    if (agentReady === true) {
+      return { ready: true, text: '端侧 Agent 已连接', hint: '由 openvela 的 ai_agent 作答，并展示它调用的工具' }
+    }
+    if (agentReady === false) {
+      return { ready: false, text: '本地指令模式', hint: lastError || '端侧 Agent 不可用，巡检控制类问句由本地指令表作答' }
+    }
+    return { ready: null, text: '正在探测端侧 Agent…', hint: '首次发送时会确认通道是否可用' }
+  }
+
+  function reset(newHistory) {
+    history = newHistory || []
+    seq = history.length
+    pending = false
+    agentReady = null
+    lastError = ''
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 与端侧 Agent 通信
+   *
+   * askSender 由宿主注入：它内部使用 `@system.velaclaw` 并调用 ask()。
+   * 这样 common/ 下不需要出现 @system.* 导入，浏览器预览与单测都能直接加载本文件。
+   * ------------------------------------------------------------------ */
+  let askSender = null
+
+  function setAskSender(fn) {
+    askSender = fn
+  }
+
+  /**
+   * 发送一句问话。
+   * 返回 Promise<{ok, text, tools, source}>
+   *   source: 'agent' 表示端侧 Agent 作答；'local' 表示本地指令表作答
+   */
+  async function ask(text) {
+    const q = String(text || '').trim()
+    if (!q) {
+      return { ok: false, text: '请先输入内容' }
+    }
+    if (pending) {
+      return { ok: false, text: '上一条还在处理中' }
+    }
+
+    pending = true
+    push('me', q)
+
+    /* 1) 有端侧通道就优先用端侧 Agent（这样 Skill / 工具调用才真的被演示到） */
+    if (askSender && agentReady !== false) {
+      try {
+        const res = await askSender(q)
+        agentReady = true
+        lastError = ''
+        const reply = (res && res.reply) || ''
+        const tools = ((res && res.tool_calls) || []).map(function (t) {
+          return t && t.name ? t.name : '未知工具'
+        })
+        pending = false
+        const msg = push('agent', reply || '（端侧 Agent 没有返回内容）', {
+          tools: tools,
+          source: 'agent'
+        })
+        return { ok: true, text: msg.text, tools: tools, source: 'agent' }
+      } catch (e) {
+        agentReady = false
+        lastError = '端侧通道不可用：' + (e && e.message ? e.message : String(e))
+      }
+    }
+
+    /* 2) 兜底：本地指令表 */
+    const local = tryLocal(q)
+    pending = false
+    if (local) {
+      const msg = push('agent', local.text, { source: 'local' })
+      return { ok: true, text: msg.text, tools: [], source: 'local', matched: local.matched }
+    }
+
+    const msg = push('agent',
+      '这句话我理解不了。可以说「开始巡检」「现在哪些区域没查完」「生成汇总」，' +
+      '或者「2 号车前进」这类指令。（认不出就不下发，这是设计目标，不是失败）',
+      { source: 'local' })
+    return { ok: true, text: msg.text, tools: [], source: 'local', matched: null }
+  }
+
+  /** 预设问句：直接对应 Skill 的 When to use，点一下就演示一条能力 */
+  function presets() {
+    return [
+      { label: '开始巡检', q: '开始本轮巡检' },
+      { label: '没查完的', q: '现在哪些区域没查完' },
+      { label: '查车队', q: '现在四台车都在线吗，电量多少' },
+      { label: '查路线', q: '本轮固定路线是怎么走的' },
+      { label: '生成汇总', q: '生成本轮巡检汇总' },
+      { label: '一键取消', q: '取消本轮全部未完成任务' }
+    ]
+  }
+
+  module.exports.default = {
+    ask: ask,
+    messages: messages,
+    isPending: isPending,
+    status: status,
+    reset: reset,
+    setAskSender: setAskSender,
+    presets: presets,
+    tryLocal: tryLocal
+  }
+
+    });
+
+    __def("data", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 端侧预设表（openvela 快应用版）
+   *
+   * 这个文件就是方案二功能一「巡检区域与任务清单管理」的全部数据：
+   *   - MAP       地图（**车端真实 ROS 地图**转出来的矢量轮廓 + 米格网）
+   *   - WAYPOINTS 航点坐标（地图坐标系，单位米）
+   *   - ROUTES    四条**预设好的固定路线**，路线 = 航点序列，没有自由坐标
+   *   - ZONES     四个区域 → 四条路线 → 四台车的登记表
+   *
+   * 设计约束（有意为之，别随手放宽）：
+   *  1. 路线只由**航点编号**组成，任务单里不出现坐标/速度/时长。
+   *     车端拿到的只是「执行 route_entrance」，无法被诱导跑任意轨迹。
+   *  2. 坐标是**地图坐标系（米）**，与车端 ROS 地图同一套，不是屏幕像素。
+   *     屏幕换算只在 map.js 里做，换屏、换任务都不用动这里。
+   *  3. 每条路线都短：**2~3 段、总长 ≤ 3.5 m、每段 ≤ 1.0 m**。
+   *     小车行为只用最朴素的原语：直行 + 到点停留 + 转向下一段。
+   *  4. 四条路线**互不重叠地分布在四块区域**，同一屏上都能看清。
+   *
+   * ⚠️ 坐标基准来自车端当前生效地图：
+   *      classroom.pgm，350×197 格，0.05 m/格，原点 [-4.61, -4.1, 0]
+   *      可行区域包围盒 x ∈ [-4.51, 12.84]，y ∈ [-3.85, 5.70]
+   *    地图轮廓由 `node tools/ros-map-to-vector.js --auto` 自动生成到 map-data.js，
+   *    **不要手改轮廓**；改航点就改本文件，改完务必跑
+   *    `node tools/gen-waypoints.js --check` 校验（单步 ≤1m / 单条 ≤3.5m / 在图内）。
+   */
+  const mapData = __imp(__mod("map-data"));
+  /* ------------------------------------------------------------------ *
+   * 1. 地图
+   *
+   * walls 来自车端真实栅格地图的矢量近似（自动生成），只用于**画图**。
+   * 本方案**不声称**具备 SLAM / 导航 / 避障能力：路线是预设的，车端只沿线走。
+   * ------------------------------------------------------------------ */
+  const MAP = {
+    name: '实验区（车端真实地图 ' + mapData.MAP_META.name + '）',
+    /** 栅格地图的名义尺寸 */
+    width: mapData.MAP_META.width,
+    height: mapData.MAP_META.height,
+    /** 地图坐标系下的原点与分辨率，真车对接时要用 */
+    origin: mapData.MAP_META.origin,
+    resolution: mapData.MAP_META.resolution,
+    /** 实际有墙/障碍的范围，画布按它取景更省地方 */
+    bounds: mapData.MAP_META.bounds,
+    /** 外墙与固定障碍（自动生成，勿手改） */
+    walls: mapData.WALLS,
+    /** 外边界缺口（门洞/通道中心点） */
+    gaps: mapData.GAPS
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 2. 航点
+   *
+   * 坐标是地图坐标系（米），**与车端 ROS 地图一致**：
+   *   x ∈ [-4.51, 12.84]，y ∈ [-3.85, 5.70]
+   * 相邻航点间距刻意压在 1 m 以内——这是方案二里"
+   * 每条路线的单步距离远小于全局上限（1.0 m）"那条约定。
+   *
+   * yaw 只作为真车执行时的参考朝向，演示动画的朝向是按**实际行进方向**算的。
+   * ------------------------------------------------------------------ */
+  const WAYPOINTS = [
+    /* --- 入口大厅（左区）：直行 → 90° 左转 --- */
+    { id: 'EN01', x: -3.50, y: 3.60, yaw: 0.00, name: '入口起点' },
+    { id: 'EN02', x: -2.60, y: 3.60, yaw: 0.00, name: '前台' },
+    { id: 'EN03', x: -2.60, y: 4.50, yaw: 1.57, name: '闸机' },
+    { id: 'EN04', x: -2.60, y: 5.00, yaw: 1.57, name: '入口终点' },
+
+    /* --- 主通道（中区）：直行 --- */
+    { id: 'AI01', x: -1.30, y: 4.20, yaw: 0.00, name: '通道起点' },
+    { id: 'AI02', x: -0.40, y: 4.20, yaw: 0.00, name: '通道 A 段' },
+    { id: 'AI03', x: 0.50, y: 4.20, yaw: 0.00, name: '通道 B 段' },
+    { id: 'AI04', x: 1.30, y: 4.20, yaw: 0.00, name: '通道终点' },
+
+    /* --- 展项区（上右区）：90° 右转 → 直行 --- */
+    { id: 'EX01', x: 2.80, y: 1.80, yaw: 0.00, name: '展项起点' },
+    { id: 'EX02', x: 2.80, y: 2.70, yaw: 1.57, name: '展台 1' },
+    { id: 'EX03', x: 3.70, y: 2.70, yaw: 0.00, name: '展台 3' },
+    { id: 'EX04', x: 4.60, y: 2.70, yaw: 0.00, name: '展台 4' },
+
+    /* --- 设备区（下右区）：直行 → 90° 左转 --- */
+    { id: 'EQ01', x: 5.00, y: -2.60, yaw: 0.00, name: '配电柜' },
+    { id: 'EQ02', x: 5.90, y: -2.60, yaw: 0.00, name: '设备区中段' },
+    { id: 'EQ03', x: 6.80, y: -2.60, yaw: 0.00, name: '机柜前' },
+    { id: 'EQ04', x: 6.80, y: -1.70, yaw: 1.57, name: '机柜背面' }
+  ]
+
+  /* ------------------------------------------------------------------ *
+   * 3. 固定路线
+   *
+   * stops 里的 dwell 是「原地停留看点」的秒数（真车对应 dwell 原语，
+   * **不发速度**）。0 表示直接过、不停。
+   *
+   * 全局路线 ALL_ROUTE 把四条短路线串起来，构成**一条完整的巡检路线**；
+   * 四条路线分别落在四块区域里，一轮巡检就是把这四段依次走完。
+   * ------------------------------------------------------------------ */
+  const ROUTES = {
+    route_entrance: {
+      name: '入口大厅路线',
+      desc: '入口 → 前台 → 闸机',
+      stops: [
+        { wp: 'EN01', dwell: 0.5 },
+        { wp: 'EN02', dwell: 0 },
+        { wp: 'EN03', dwell: 0 },
+        { wp: 'EN04', dwell: 1.0 }
+      ]
+    },
+    route_aisle: {
+      name: '主通道路线',
+      desc: '通道 A 段 → B 段',
+      stops: [
+        { wp: 'AI01', dwell: 0.5 },
+        { wp: 'AI02', dwell: 0 },
+        { wp: 'AI03', dwell: 0 },
+        { wp: 'AI04', dwell: 1.0 }
+      ]
+    },
+    route_exhibit: {
+      name: '展项区路线',
+      desc: '展台 1 → 展台 4 绕行',
+      stops: [
+        { wp: 'EX01', dwell: 0.5 },
+        { wp: 'EX02', dwell: 0 },
+        { wp: 'EX03', dwell: 0 },
+        { wp: 'EX04', dwell: 1.0 }
+      ]
+    },
+    route_equipment: {
+      name: '设备区路线',
+      desc: '配电柜 → 机柜背面',
+      stops: [
+        { wp: 'EQ01', dwell: 0.5 },
+        { wp: 'EQ02', dwell: 0 },
+        { wp: 'EQ03', dwell: 0 },
+        { wp: 'EQ04', dwell: 1.0 }
+      ]
+    }
+  }
+
+  /** 整条固定巡检路线（四条短路线依次执行） */
+  const ALL_ROUTE = ['route_entrance', 'route_aisle', 'route_exhibit', 'route_equipment']
+
+  /* ------------------------------------------------------------------ *
+   * 4. 区域登记表：一个区域 = 一条固定路线 = 一台默认车辆
+   *
+   * 四条路线各自落在自己那块区域里（入口大厅 / 主通道 / 展项区 / 设备区），
+   * 所以地图上一眼看得到四条互不重叠的短路线。
+   * ------------------------------------------------------------------ */
+  const ZONES = [
+    { id: 'Z1', name: '入口大厅', route: 'route_entrance', car: 'CAR-1' },
+    { id: 'Z2', name: '主通道', route: 'route_aisle', car: 'CAR-2' },
+    { id: 'Z3', name: '展项区', route: 'route_exhibit', car: 'CAR-3' },
+    { id: 'Z4', name: '设备区', route: 'route_equipment', car: 'CAR-4' }
+  ]
+
+  /* ------------------------------------------------------------------ *
+   * 5. 车辆表
+   *
+   * mode 说明本车这一版走哪条通道，界面上如实标出来：
+   *   'demo' —— 模拟器内演示：小车标记按航点逐段移动，不碰真车
+   *   'ros'  —— 经宿主机桥接到车端 ROS（本版未启用，留接口）
+   * ------------------------------------------------------------------ */
+  const CARS = [
+    { id: 'CAR-1', name: '1 号车', zoneId: 'Z1', zone: '入口大厅', ip: '192.168.1.201', online: true, battery: 88, mode: 'demo' },
+    { id: 'CAR-2', name: '2 号车', zoneId: 'Z2', zone: '主通道', ip: '192.168.1.202', online: true, battery: 84, mode: 'demo' },
+    { id: 'CAR-3', name: '3 号车', zoneId: 'Z3', zone: '展项区', ip: '192.168.1.203', online: true, battery: 79, mode: 'demo' },
+    { id: 'CAR-4', name: '4 号车', zoneId: 'Z4', zone: '设备区', ip: '192.168.1.204', online: true, battery: 91, mode: 'demo' }
+  ]
+
+  /* ------------------------------------------------------------------ *
+   * 6. 状态字典：任务状态机的五个态（与 Skill / 协议用同一套词）
+   * ------------------------------------------------------------------ */
+  const STATUS = {
+    pending: { text: '待执行', color: '#94A3B8', bg: 'rgba(148,163,184,0.16)' },
+    running: { text: '进行中', color: '#4DA3FF', bg: 'rgba(77,163,255,0.16)' },
+    done: { text: '已完成', color: '#3DDC84', bg: 'rgba(61,220,132,0.16)' },
+    blocked: { text: '阻塞', color: '#FF6B6B', bg: 'rgba(255,107,107,0.16)' },
+    cancelled: { text: '已取消', color: '#FBBF24', bg: 'rgba(251,191,36,0.16)' },
+    offline: { text: '离线', color: '#FBBF24', bg: 'rgba(251,191,36,0.16)' }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 7. 阈值与限值（与 patrol_zones.json 的 limits 对齐）
+   * ------------------------------------------------------------------ */
+  const LIMITS = {
+    /** 演示推进速度：m/s。真车实测巡检速度是 0.12 m/s，演示用放快，否则一段要 20 秒 */
+    demo_speed_mps: 0.8,
+    /** 连续多少秒收不到回执判失联 → 阻塞 */
+    receipt_timeout_s: 20,
+    /** 单任务时限（秒），超时判阻塞 */
+    task_deadline_s: 180,
+    /** 电量低于此值不派长任务 */
+    battery_min: 20,
+    /** 单步距离上限（米），与 patrol_zones.json 的 step_distance_max_m 对齐 */
+    step_distance_max_m: 1.0
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 8. 便捷查询
+   * ------------------------------------------------------------------ */
+  function waypointById(id) {
+    for (let i = 0; i < WAYPOINTS.length; i += 1) {
+      if (WAYPOINTS[i].id === id) {
+        return WAYPOINTS[i]
+      }
+    }
+    return null
+  }
+
+  function zoneById(id) {
+    for (let i = 0; i < ZONES.length; i += 1) {
+      if (ZONES[i].id === id) {
+        return ZONES[i]
+      }
+    }
+    return null
+  }
+
+  function carById(id) {
+    for (let i = 0; i < CARS.length; i += 1) {
+      if (CARS[i].id === id) {
+        return CARS[i]
+      }
+    }
+    return null
+  }
+
+  /** 把一条路线展开成航点对象序列（含每点停留时间） */
+  function routePoints(routeId) {
+    const r = ROUTES[routeId]
+    if (!r) {
+      return []
+    }
+    const out = []
+    for (let i = 0; i < r.stops.length; i += 1) {
+      const wp = waypointById(r.stops[i].wp)
+      if (wp) {
+        out.push({
+          id: wp.id,
+          x: wp.x,
+          y: wp.y,
+          yaw: wp.yaw,
+          name: wp.name,
+          dwell: r.stops[i].dwell
+        })
+      }
+    }
+    return out
+  }
+
+  /** 一条路线的总长度（米） */
+  function routeLength(routeId) {
+    const pts = routePoints(routeId)
+    let sum = 0
+    for (let i = 1; i < pts.length; i += 1) {
+      const dx = pts[i].x - pts[i - 1].x
+      const dy = pts[i].y - pts[i - 1].y
+      sum += Math.sqrt(dx * dx + dy * dy)
+    }
+    return sum
+  }
+
+  /** 整条巡检路线（四条短路线之和）的总长度 */
+  function allRouteLength() {
+    let sum = 0
+    for (let i = 0; i < ALL_ROUTE.length; i += 1) {
+      sum += routeLength(ALL_ROUTE[i])
+    }
+    return sum
+  }
+
+  module.exports.default = {
+    MAP: MAP,
+    WAYPOINTS: WAYPOINTS,
+    ROUTES: ROUTES,
+    ALL_ROUTE: ALL_ROUTE,
+    ZONES: ZONES,
+    CARS: CARS,
+    STATUS: STATUS,
+    LIMITS: LIMITS,
+    waypointById: waypointById,
+    zoneById: zoneById,
+    carById: carById,
+    routePoints: routePoints,
+    routeLength: routeLength,
+    allRouteLength: allRouteLength
+  }
+    });
+
+    __def("map-data", function (__req, __imp, module, exports) {
+  /**
+   * 地图矢量轮廓 —— **自动生成，请勿手改**
+   *
+   * 生成命令：node tools/ros-map-to-vector.js --auto
+   * 来源：车端当前生效地图 classroom.pgm（350×197 格，0.05 m/格，原点 [-4.61, -4.1, 0]）
+   *
+   * 说明：把栅格地图压成矩形块，只用于**画图**；
+   *      不参与任何控制逻辑（路线是预设的，车端只沿线走）。
+   */
+
+  const MAP_META = {
+    "name": "classroom",
+    "source": "classroom.pgm",
+    "gridW": 350,
+    "gridH": 197,
+    "resolution": 0.05,
+    "origin": [
+      -4.61,
+      -4.1,
+      0
+    ],
+    "width": 17.5,
+    "height": 9.85,
+    "bounds": {
+      "x": [
+        -4.51,
+        12.84
+      ],
+      "y": [
+        -3.85,
+        5.7
+      ]
+    }
+  }
+
+  /** 外墙与固定障碍（矩形块，米） */
+  const WALLS = [
+    { x: -2.71, y: 5.5, w: 0.25, h: 0.2 },
+    { x: -1.71, y: 5.5, w: 0.3, h: 0.15 },
+    { x: -1.11, y: 5.45, w: 0.3, h: 0.2 },
+    { x: -0.71, y: 5.4, w: 0.2, h: 0.2 },
+    { x: -0.46, y: 5.4, w: 0.2, h: 0.2 },
+    { x: -0.21, y: 5.4, w: 0.2, h: 0.2 },
+    { x: -3.31, y: 5, w: 0.1, h: 0.5 },
+    { x: 2.19, y: 5.3, w: 1.05, h: 0.15 },
+    { x: 5.04, y: 5.25, w: 0.4, h: 0.15 },
+    { x: 5.49, y: 5.15, w: 0.3, h: 0.25 },
+    { x: 7.74, y: 5.1, w: 0.15, h: 0.3 },
+    { x: 8.34, y: 5.05, w: 0.2, h: 0.2 },
+    { x: 8.54, y: 5.1, w: 0.45, h: 0.1 },
+    { x: 10.19, y: 5.05, w: 0.35, h: 0.15 },
+    { x: 12.39, y: 4.2, w: 0.05, h: 0.85 },
+    { x: -4.16, y: 3.35, w: 0.05, h: 1.55 },
+    { x: 4.04, y: 4.4, w: 0.1, h: 0.5 },
+    { x: -4.21, y: 2.45, w: 0.05, h: 2.4 },
+    { x: 4.19, y: 4.35, w: 0.35, h: 0.25 },
+    { x: -4.26, y: 1.35, w: 0.05, h: 3.1 },
+    { x: 12.69, y: 1.7, w: 0.1, h: 2.6 },
+    { x: 12.79, y: 3, w: 0.05, h: 1.2 },
+    { x: -4.31, y: 0.15, w: 0.05, h: 3.75 },
+    { x: 5.79, y: 2.65, w: 0.1, h: 0.4 },
+    { x: -4.36, y: -0.9, w: 0.05, h: 2.75 },
+    { x: 11.09, y: 0.55, w: 0.1, h: 0.85 },
+    { x: -4.41, y: -2.25, w: 0.05, h: 3.05 },
+    { x: 12.64, y: -2, w: 0.05, h: 2.65 },
+    { x: 12.69, y: -1.7, w: 0.05, h: 2.25 },
+    { x: 8.84, y: -0.55, w: 0.15, h: 0.4 },
+    { x: -4.46, y: -2.75, w: 0.05, h: 2.25 },
+    { x: 12.59, y: -2.1, w: 0.05, h: 1.6 },
+    { x: -4.51, y: -2.7, w: 0.05, h: 1.45 },
+    { x: 12.44, y: -3.1, w: 0.05, h: 0.8 },
+    { x: 12.39, y: -3.3, w: 0.05, h: 0.95 },
+    { x: 12.34, y: -3.35, w: 0.05, h: 0.95 },
+    { x: -4.36, y: -2.8, w: 0.5, h: 0.15 },
+    { x: -2.46, y: -2.8, w: 0.8, h: 0.05 },
+    { x: -2.41, y: -2.85, w: 0.8, h: 0.05 },
+    { x: -3.76, y: -3, w: 0.65, h: 0.15 },
+    { x: -3.11, y: -3, w: 0.65, h: 0.1 },
+    { x: -1.76, y: -3.25, w: 0.15, h: 0.3 },
+    { x: 0.04, y: -3.2, w: 0.5, h: 0.15 },
+    { x: 0.54, y: -3.2, w: 1.15, h: 0.1 },
+    { x: 1.69, y: -3.25, w: 0.45, h: 0.1 },
+    { x: 2.19, y: -3.3, w: 0.9, h: 0.15 },
+    { x: 0.69, y: -3.25, w: 1, h: 0.05 },
+    { x: 3.29, y: -3.3, w: 0.7, h: 0.1 },
+    { x: 9.79, y: -3.25, w: 0.85, h: 0.05 },
+    { x: 4.64, y: -3.35, w: 1.1, h: 0.1 },
+    { x: 5.74, y: -3.4, w: 1.6, h: 0.1 },
+    { x: 7.74, y: -3.45, w: 0.4, h: 0.1 },
+    { x: -1.51, y: -3.5, w: 0.75, h: 0.1 },
+    { x: -0.76, y: -3.55, w: 0.75, h: 0.1 },
+    { x: 8.49, y: -3.85, w: 1.15, h: 0.05 }
+  ]
+
+  /** 外边界缺口（门洞/通道中心点，米） */
+  const GAPS = [
+    { edge: "top", x: -3.79, y: 5.75, width: 1.65 },
+    { edge: "top", x: 6.21, y: 5.75, width: 13.35 },
+    { edge: "bottom", x: 4.14, y: -4.1, width: 17.5 },
+    { edge: "left", x: -4.61, y: 2.43, width: 6.65 },
+    { edge: "left", x: -4.61, y: -3.4, width: 1.4 },
+    { edge: "right", x: 12.89, y: 5.03, width: 1.45 },
+    { edge: "right", x: 12.89, y: -1.35, width: 5.5 }
+  ]
+
+  module.exports.default = { MAP_META: MAP_META, WALLS: WALLS, GAPS: GAPS }
+
+    });
+
+    __def("map", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 地图渲染（纯函数）
+   *
+   * 把 CFG 里的**地图坐标系（米）**换算成屏幕像素，产出一张简笔平面图：
+   *   · 房间轮廓与固定障碍（来自车端真实 ROS 地图的矢量近似）
+   *   · 四个区域的分区标签与底色
+   *   · 四条固定路线的折线 + 航点
+   *   · 每台车的当前位置与朝向（沿路线逐段移动的动画就靠它）
+   *
+   * 为什么用字符串拼 SVG 而不是画一堆 div：
+   *   · 折线、圆、旋转的三角用 SVG 一条元素就够，纯 flex 盒模型做不了斜线；
+   *   · 快应用（LVGL）与浏览器预览对 SVG 子集的支持一致，不需要两套渲染；
+   *   · 整段是**纯函数**，可以直接在 Node 里断言输出，不用起界面。
+   *
+   * 约定：SVG 坐标系 y 轴向下，而地图坐标系 y 轴向上，
+   * 所以换算时要翻一下。这是最容易错的一处，单测里锁住了。
+   */
+  const CFG = __imp(__mod("data"));
+  /** 屏幕与画布尺寸（openvela 模拟器 goldfish 屏是 720×1280 竖屏） */
+  const SCREEN_W = 720
+  const SCREEN_H = 1280
+
+  /** 地图画布在页面里的排版参数 */
+  const MAP_LAYOUT = {
+    /** 画布左右留白 */
+    padX: 16,
+    /** 画布高度（竖屏下地图占屏幕中段） */
+    height: 460,
+    /** 画布内再留一圈内边距，避免路线贴边 */
+    inner: 14
+  }
+
+  /**
+   * 世界坐标（米）→ 屏幕像素。
+   *
+   * 取景按**实际有墙的范围**（map.bounds）算，不按栅格名义尺寸：
+   * 车端真图上四周有大片空白（未知区被裁掉了），按名义尺寸取景会把路线挤成一小团。
+   */
+  function makeProjector(map, width, height) {
+    const layout = MAP_LAYOUT
+    const usableW = width - layout.padX * 2 - layout.inner * 2
+    const usableH = height - layout.inner * 2
+    const b = map.bounds || { x: [0, map.width], y: [0, map.height] }
+    const wx = b.x[1] - b.x[0]
+    const wy = b.y[1] - b.y[0]
+    const scale = Math.min(usableW / wx, usableH / wy)
+    const offX = layout.padX + layout.inner + (usableW - wx * scale) / 2 - b.x[0] * scale
+    const offY = layout.inner + (usableH - wy * scale) / 2 + b.y[1] * scale
+    return function project(x, y) {
+      return {
+        sx: +(offX + x * scale).toFixed(1),
+        /* y 轴翻转：地图向上为正，SVG 向下为正 */
+        sy: +(offY - y * scale).toFixed(1)
+      }
+    }
+  }
+
+  /** 转义：名称来自数据表，仍统一转义一遍，避免以后改数据时出问题 */
+  function esc(s) {
+    return String(s === undefined || s === null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  /** 区域分区块（与 data.js 里四条路线所在的位置对应；改路线时同步改这里） */
+  const ZONE_BLOCKS = [
+    { id: 'Z1', name: '入口大厅', x: -3.90, y: 3.10, w: 1.90, h: 2.10, color: 'rgba(47,109,246,0.13)', edge: 'rgba(47,109,246,0.45)' },
+    { id: 'Z2', name: '主通道', x: -1.70, y: 3.70, w: 3.30, h: 0.90, color: 'rgba(14,165,164,0.13)', edge: 'rgba(14,165,164,0.45)' },
+    { id: 'Z3', name: '展项区', x: 2.40, y: 1.40, w: 2.60, h: 1.70, color: 'rgba(124,92,255,0.13)', edge: 'rgba(124,92,255,0.45)' },
+    { id: 'Z4', name: '设备区', x: 4.60, y: -3.00, w: 2.60, h: 1.70, color: 'rgba(245,158,11,0.13)', edge: 'rgba(245,158,11,0.45)' }
+  ]
+
+  /**
+   * 渲染整张地图。
+   *
+   * @param {object} opts
+   *   zones     store.zoneStates() 的结果（拿状态色）
+   *   tasks     每个区域的实时位置（{ zoneId: {x, y, yaw} }），没有就不画车
+   *   width     画布像素宽，默认 SCREEN_W
+   *   height    画布像素高，默认 MAP_LAYOUT.height
+   *   showGrid  是否画米格网
+   * @returns {string} 一段 <svg> 字符串
+   */
+  function renderMap(opts) {
+    const o = opts || {}
+    const zones = o.zones || []
+    const tasks = o.tasks || {}
+    const width = o.width || SCREEN_W
+    const height = o.height || MAP_LAYOUT.height
+    const map = CFG.MAP
+    const project = makeProjector(map, width, height)
+
+    const statusOfZone = {}
+    for (let i = 0; i < zones.length; i += 1) {
+      statusOfZone[zones[i].id] = zones[i]
+    }
+
+    const out = []
+    out.push('<svg class="mapsvg" width="' + width + '" height="' + height +
+      '" viewBox="0 0 ' + width + ' ' + height + '">')
+
+    /* 底色 */
+    out.push('<rect x="0" y="0" width="' + width + '" height="' + height +
+      '" rx="18" fill="#0e1729"/>')
+
+    /* 米格网（每米一条淡线，按实际取景范围画） */
+    const bnd = map.bounds || { x: [0, map.width], y: [0, map.height] }
+    if (o.showGrid !== false) {
+      for (let gx = Math.ceil(bnd.x[0]); gx <= Math.floor(bnd.x[1]); gx += 1) {
+        const a = project(gx, bnd.y[0])
+        const b = project(gx, bnd.y[1])
+        out.push('<line x1="' + a.sx + '" y1="' + a.sy + '" x2="' + b.sx + '" y2="' + b.sy +
+          '" stroke="rgba(148,163,184,0.10)" stroke-width="1"/>')
+      }
+      for (let gy = Math.ceil(bnd.y[0]); gy <= Math.floor(bnd.y[1]); gy += 1) {
+        const a = project(bnd.x[0], gy)
+        const b = project(bnd.x[1], gy)
+        out.push('<line x1="' + a.sx + '" y1="' + a.sy + '" x2="' + b.sx + '" y2="' + b.sy +
+          '" stroke="rgba(148,163,184,0.10)" stroke-width="1"/>')
+      }
+    }
+
+    /* 区域分区块 + 区域名 */
+    for (let i = 0; i < ZONE_BLOCKS.length; i += 1) {
+      const b = ZONE_BLOCKS[i]
+      const p1 = project(b.x, b.y + b.h)
+      const p2 = project(b.x + b.w, b.y)
+      out.push('<rect x="' + p1.sx + '" y="' + p1.sy + '" width="' + (p2.sx - p1.sx) +
+        '" height="' + (p2.sy - p1.sy) + '" rx="10" fill="' + b.color +
+        '" stroke="' + b.edge + '" stroke-width="1" stroke-dasharray="6 4"/>')
+      const st = statusOfZone[b.id]
+      const label = b.name + (st ? ' · ' + st.statusText : '')
+      const lp = project(b.x + 0.15, b.y + b.h - 0.35)
+      out.push('<text x="' + lp.sx + '" y="' + lp.sy + '" fill="' +
+        (st ? st.color : '#94a3b8') + '" font-size="15" font-weight="bold">' +
+        esc(label) + '</text>')
+    }
+
+    /* 房间轮廓与固定障碍 */
+    for (let i = 0; i < map.walls.length; i += 1) {
+      const w = map.walls[i]
+      const p1 = project(w.x, w.y + w.h)
+      const p2 = project(w.x + w.w, w.y)
+      out.push('<rect x="' + p1.sx + '" y="' + p1.sy + '" width="' + Math.max(1, p2.sx - p1.sx) +
+        '" height="' + Math.max(1, p2.sy - p1.sy) + '" fill="rgba(203,213,225,0.55)"/>')
+    }
+
+    /* 四条固定路线：先画折线，再画航点 */
+    const routeIds = CFG.ALL_ROUTE
+    for (let r = 0; r < routeIds.length; r += 1) {
+      const rid = routeIds[r]
+      const pts = CFG.routePoints(rid)
+      if (pts.length < 2) {
+        continue
+      }
+      const zone = zones.filter(function (z) { return z.route === rid })[0]
+      const color = zone ? zone.color : '#4DA3FF'
+      const pl = []
+      for (let i = 0; i < pts.length; i += 1) {
+        const p = project(pts[i].x, pts[i].y)
+        pl.push(p.sx + ',' + p.sy)
+      }
+      out.push('<polyline points="' + pl.join(' ') + '" fill="none" stroke="' + color +
+        '" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>')
+
+      /* 航点：起点稍大，停留点用实心，过路点用小空心 */
+      for (let i = 0; i < pts.length; i += 1) {
+        const p = project(pts[i].x, pts[i].y)
+        const isStart = i === 0
+        const isStop = pts[i].dwell > 0
+        const rr = isStart ? 5.5 : (isStop ? 4.5 : 3)
+        out.push('<circle cx="' + p.sx + '" cy="' + p.sy + '" r="' + rr + '" fill="' +
+          (isStop || isStart ? color : '#0e1729') + '" stroke="' + color + '" stroke-width="2"/>')
+      }
+    }
+
+    /* 小车标记：位置 + 朝向（三角），在跑的车加一圈光晕 */
+    const zoneIds = Object.keys(tasks)
+    for (let i = 0; i < zoneIds.length; i += 1) {
+      const zid = zoneIds[i]
+      const t = tasks[zid]
+      const st = statusOfZone[zid]
+      if (!st) {
+        continue
+      }
+      const p = project(t.x, t.y)
+      const color = st.color
+      /* yaw 是地图坐标系弧度；SVG 里 y 翻转，所以取负 */
+      const deg = +(-(t.yaw || 0) * 180 / Math.PI).toFixed(1)
+      if (st.status === 'running') {
+        out.push('<circle cx="' + p.sx + '" cy="' + p.sy + '" r="16" fill="' + color +
+          '" opacity="0.18"/>')
+      }
+      out.push('<g transform="translate(' + p.sx + ',' + p.sy + ') rotate(' + deg + ')">' +
+        '<polygon points="11,0 -7,-8 -7,8" fill="' + color + '" stroke="#0b1220" stroke-width="1.5"/>' +
+        '</g>')
+      out.push('<text x="' + (p.sx + 15) + '" y="' + (p.sy - 10) + '" fill="' + color +
+        '" font-size="14" font-weight="bold">' + esc(st.car) + '</text>')
+    }
+
+    /* 比例尺：1 米 */
+    const s0 = project(bnd.x[0] + 0.4, bnd.y[0] + 0.35)
+    const s1 = project(bnd.x[0] + 1.4, bnd.y[0] + 0.35)
+    out.push('<line x1="' + s0.sx + '" y1="' + s0.sy + '" x2="' + s1.sx + '" y2="' + s1.sy +
+      '" stroke="#94a3b8" stroke-width="3"/>')
+    out.push('<text x="' + s0.sx + '" y="' + (s0.sy - 7) +
+      '" fill="#94a3b8" font-size="13">1 m</text>')
+
+    out.push('</svg>')
+    return out.join('')
+  }
+
+  module.exports.default = {
+    SCREEN_W: SCREEN_W,
+    SCREEN_H: SCREEN_H,
+    MAP_LAYOUT: MAP_LAYOUT,
+    ZONE_BLOCKS: ZONE_BLOCKS,
+    makeProjector: makeProjector,
+    renderMap: renderMap
+  }
+
+    });
+
+    __def("router", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 仓内路由
+   *
+   * 为什么自己写路由，而不用 `@system.router`：
+   *   官方 Feature Framework 的 modules 清单里**没有** router 这个 JS 模块
+   *   （只有 C 层的 ApplicationRoute / ApplicationStackPagePush），
+   *   也就是说 `.ux` 里 `import router from '@system.router'` 在模拟器上
+   *   不一定能解析。本工程用一个仓内路由 + 单页条件渲染绕开这个不确定性：
+   *
+   *     · openvela 上：app.ux 一个页面，六个视图靠 `curPage` 切换，零系统依赖
+   *     · 浏览器预览里：同一个路由再同步一下 hash，前进/后退键也能用
+   *
+   * 代价是六个视图共用一个页面文件（编译时由 tools/build-openvela-app.js 拼装），
+   * 换来的是"不依赖未验证的系统模块"。
+   */
+
+  const PAGE_TITLES = {
+    Home: 'VelaGuard 巡检桌面',
+    Dispatch: '巡检调度台',
+    Map: '地图与路线',
+    Zones: '区域与路线',
+    Records: '巡检记录',
+    Voice: '语音助手'
+  }
+
+  let current = 'Home'
+  let stack = ['Home']
+  let listener = null
+
+  function notify() {
+    if (listener) {
+      listener(current)
+    }
+  }
+
+  function init(page) {
+    current = PAGE_TITLES[page] ? page : 'Home'
+    stack = ['Home']
+    return current
+  }
+
+  function push(page) {
+    if (!PAGE_TITLES[page]) {
+      return { ok: false, message: '页面不存在：' + page }
+    }
+    if (page === current) {
+      return { ok: true, page: current }
+    }
+    stack.push(page)
+    current = page
+    notify()
+    return { ok: true, page: current }
+  }
+
+  function back() {
+    if (stack.length <= 1) {
+      return { ok: false, page: current }
+    }
+    stack.pop()
+    current = stack[stack.length - 1]
+    notify()
+    return { ok: true, page: current }
+  }
+
+  function replace(page) {
+    if (!PAGE_TITLES[page]) {
+      return { ok: false, page: current }
+    }
+    stack[stack.length - 1] = page
+    current = page
+    notify()
+    return { ok: true, page: current }
+  }
+
+  function get() {
+    return current
+  }
+
+  function title(page) {
+    return PAGE_TITLES[page || current] || ''
+  }
+
+  function home() {
+    stack = ['Home']
+    current = 'Home'
+    notify()
+    return current
+  }
+
+  function onRoute(fn) {
+    listener = fn
+  }
+
+  function pages() {
+    return Object.keys(PAGE_TITLES)
+  }
+
+  module.exports.default = {
+    init: init,
+    push: push,
+    back: back,
+    replace: replace,
+    get: get,
+    title: title,
+    home: home,
+    onRoute: onRoute,
+    pages: pages
+  }
+
+    });
+
+    __def("store", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 端侧任务状态机（openvela 快应用版）
+   *
+   * 这个文件承载方案二的功能二、三、四：
+   *   功能二 任务派单与结果回收 —— dispatch / tick / 状态流转
+   *   功能三 异常中断与人工处置 —— 阻塞判定 + 重派 / 取消 / 顺延
+   *   功能四 巡检覆盖的基础汇总 —— summarize / 每轮记录
+   *
+   * 三条设计原则（对应方案的红线）：
+   *  1. **路线只认编号**：派单只传 route 编号，坐标/速度由 CFG 里的预设路线决定，
+   *     调用方无法传入任意坐标。
+   *  2. **越界即拒发，不静默改成边界值**：参数不合规返回 {ok:false}，不留后门。
+   *  3. **离线车不得被派单**：在线状态先判，再谈派单。
+   *
+   * 本文件是纯逻辑，不碰界面、不碰宿主 API，因此可以直接在 Node 里跑单测。
+   */
+  const CFG = __imp(__mod("data"));
+  const STATUS = CFG.STATUS
+
+  /* ------------------------------------------------------------------ *
+   * 内部状态：任务表 + 轮次
+   * ------------------------------------------------------------------ */
+  let seq = 1000
+  let round = 0
+  /** 本轮各区域的最新任务，key 是 zoneId */
+  let tasks = {}
+  /** 历史轮次台账 */
+  let records = []
+  /** 事件回调（界面订阅后用于主动弹提示） */
+  let emitter = null
+
+  /**
+   * 虚拟时钟（毫秒）。
+   *
+   * 为什么不直接用 Date.now()：失联判定是**方案二功能三的核心**（连续 N 秒无回执 →
+   * 判失联），如果读墙钟，这条逻辑在自动化测试里就必须真等 20 秒，实际上等于没测。
+   * 改成由 tick(dt) 推进的虚拟时钟后，20 秒的超时可以在一次循环里验完。
+   * 界面侧每个 tick 传真实经过的秒数，行为与墙钟一致。
+   */
+  let clock = Date.now()
+
+  function nowText() {
+    const d = new Date()
+    const pad = function (n) { return n < 10 ? '0' + n : '' + n }
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+  }
+
+  function makeTask(zone, car) {
+    seq += 1
+    const pts = CFG.routePoints(zone.route)
+    return {
+      /* --- 任务单字段（与 patrol_proto.py 的 task 消息一一对应） --- */
+      taskId: 'T-' + seq,
+      seq: seq,
+      robot: car ? car.id : '',
+      zoneId: zone.id,
+      zoneName: zone.name,
+      route: zone.route,
+      status: 'pending',
+      /* --- 执行进度 --- */
+      leg: 0,              // 正在走的第几段（0 = 从起点到第 1 个航点）
+      legProgress: 0,      // 当前段完成比例 0~1
+      legDone: false,      // 当前段终点已到达（正在停留）
+      dwellLeft: 0,        // 当前航点还要停多久
+      x: pts.length ? pts[0].x : 0,
+      y: pts.length ? pts[0].y : 0,
+      yaw: pts.length ? pts[0].yaw : 0,
+      totalLegs: Math.max(0, pts.length - 1),
+      points: pts,
+      /* --- 台账 --- */
+      round: round,
+      startedAt: 0,
+      finishedAt: 0,
+      elapsed: 0,
+      lastReceiptAt: 0,
+      /**
+       * 静默标记：为真时车端「不回话」——回执时间不再刷新，于是必然触发失联判定。
+       * 演示里靠它把「阈值主动」这条能力做得**可复现**（不用真去拔网线）。
+       */
+      silent: false,
+      reason: '',
+      detail: '等待派单'
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 功能二：任务派单与结果回收
+   * ------------------------------------------------------------------ */
+
+  /**
+   * 派单。只接受 zoneId —— 路线由区域登记表决定，不接受外部坐标。
+   * 返回 {ok, message, taskId?}
+   */
+  function dispatch(zoneId) {
+    const zone = CFG.zoneById(zoneId)
+    if (!zone) {
+      return { ok: false, message: '区域不存在：' + zoneId }
+    }
+    const car = CFG.carById(zone.car)
+    if (!car) {
+      return { ok: false, message: zone.name + ' 未登记车辆，派单已拒绝' }
+    }
+    if (!car.online) {
+      return { ok: false, message: car.name + ' 离线，拒绝派单（离线车不得被派单）' }
+    }
+    if (car.battery < CFG.LIMITS.battery_min) {
+      return { ok: false, message: car.name + ' 电量 ' + car.battery + '% 低于 ' +
+        CFG.LIMITS.battery_min + '%，不派单' }
+    }
+    if (!CFG.ROUTES[zone.route]) {
+      return { ok: false, message: '区域 ' + zone.name + ' 的路线 ' + zone.route + ' 未登记' }
+    }
+    const old = tasks[zoneId]
+    if (old && old.status === 'running') {
+      return { ok: false, message: zone.name + ' 已有任务在执行（' + old.taskId + '）' }
+    }
+
+    const t = makeTask(zone, car)
+    tasks[zoneId] = t
+    return { ok: true, taskId: t.taskId, message: '已向 ' + car.name + ' 下发「' + zone.name + '」任务单 ' + t.taskId }
+  }
+
+  /** 取消某个区域的任务 */
+  function cancel(zoneId) {
+    const t = tasks[zoneId]
+    if (!t) {
+      return { ok: false, message: '该区域没有任务' }
+    }
+    if (t.status === 'done') {
+      return { ok: false, message: t.zoneName + ' 已完成，无需取消' }
+    }
+    t.status = 'cancelled'
+    t.detail = '人工取消'
+    t.reason = 'cancelled'
+    t.finishedAt = clock
+    return { ok: true, message: '已取消「' + t.zoneName + '」任务 ' + t.taskId }
+  }
+
+  /** 一键取消本轮全部未完成任务 */
+  function cancelAll() {
+    let n = 0
+    for (let i = 0; i < CFG.ZONES.length; i += 1) {
+      const t = tasks[CFG.ZONES[i].id]
+      if (t && (t.status === 'running' || t.status === 'blocked' || t.status === 'pending')) {
+        t.status = 'cancelled'
+        t.detail = '一键取消'
+        t.reason = 'cancelled'
+        t.finishedAt = clock
+        n += 1
+      }
+    }
+    return { ok: true, message: n > 0 ? '已取消 ' + n + ' 个未完成任务' : '当前没有待取消的任务' }
+  }
+
+  /**
+   * 功能三：异常中断的人工处置。
+   * 阻塞/失联任务可以「重派」——把同一区域的路线上顺延给登记表中的下一台**在线**车。
+   * 找不到可用车就如实说找不到，不做假成功。
+   */
+  function reassign(zoneId) {
+    const t = tasks[zoneId]
+    const zone = CFG.zoneById(zoneId)
+    if (!zone) {
+      return { ok: false, message: '区域不存在' }
+    }
+    if (!t) {
+      return dispatch(zoneId)
+    }
+    /* 候选车：在线、电量够、且不是当前这台 */
+    const candidates = CFG.CARS.filter(function (c) {
+      return c.online && c.battery >= CFG.LIMITS.battery_min && c.id !== t.robot
+    })
+    if (candidates.length === 0) {
+      return { ok: false, message: '没有其它在线车辆可承接「' + zone.name + '」，建议顺延到下一轮' }
+    }
+    const car = candidates[0]
+    const nt = makeTask(zone, car)
+    nt.status = 'pending'
+    nt.detail = '由 ' + t.robot + ' 改派而来（原任务 ' + t.taskId + ' ' + STATUS[t.status].text + '）'
+    tasks[zoneId] = nt
+    return { ok: true, taskId: nt.taskId, message: '「' + zone.name + '」已改派给 ' + car.name + '（' + nt.taskId + '）' }
+  }
+
+  /** 把某轮未完成的区域顺延到下一轮 */
+  function postpone(zoneId) {
+    const t = tasks[zoneId]
+    if (!t) {
+      return { ok: false, message: '该区域没有任务' }
+    }
+    t.status = 'cancelled'
+    t.detail = '已顺延到下一轮'
+    t.reason = 'postponed'
+    t.finishedAt = clock
+    return { ok: true, message: '「' + t.zoneName + '」已顺延到下一轮' }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 功能三：推进与异常判定
+   * ------------------------------------------------------------------ */
+
+  /** 记录一次回执（心跳）。静默中的车不发，于是必然被判失联。 */
+  function receipt(t) {
+    if (!t.silent) {
+      t.lastReceiptAt = clock
+    }
+  }
+
+  /**
+   * 到达第 leg 段的终点航点。
+   *
+   * 三种情形分开处理，这是修掉「卡在某个航点永远不走」的关键：
+   *  · 是最后一段 —— 置 legDone 并进入停留，停留结束才结算完成
+   *  · dwell > 0  —— 置 legDone 并进入停留
+   *  · dwell = 0  —— 立刻结算这一段，leg 前进，**不要**置 legDone
+   *    （早期版本无条件置 legDone，遇到 dwell=0 的航点就再也没人推进 leg，
+   *     任务永远停在那里，20 秒后被误判成失联）
+   */
+  function arrive(t) {
+    const to = t.points[t.leg + 1]
+    t.x = to.x
+    t.y = to.y
+    t.yaw = to.yaw
+    t.legProgress = 1
+    t.detail = '已到达 ' + to.name + '（' + fmt(t.x) + ', ' + fmt(t.y) + '）'
+
+    if (t.leg + 1 >= t.points.length - 1) {
+      /*
+       * 刚走完的是**最后一段**（段号从 0 数，最后一段是 points.length - 2）。
+       * 判据必须是「leg + 1 >= points.length - 1」，不能写成
+       * 「t.leg >= t.totalLegs」——后者在最后一段到达时不成立
+       * （leg 那时是 totalLegs - 1），于是永远进不了收尾分支，
+       * 表现为车停在终点、文案也写了"路线执行完毕"，状态却一直是进行中。
+       */
+      t.dwellLeft = to.dwell > 0 ? to.dwell : 0.0001
+      t.legDone = true
+      return
+    }
+    if (to.dwell > 0) {
+      t.dwellLeft = to.dwell
+      t.legDone = true
+      return
+    }
+    t.leg += 1
+    t.legProgress = 0
+    const nt = t.points[t.leg + 1]
+    t.detail = '通过 ' + to.name + '，前往 ' + nt.name
+  }
+
+  /** 让一个运行中的任务沿路线前进 dt 秒 */
+  function advance(t, dt) {
+    /*
+     * 已结束的任务一律不再推进。
+     * 少了这一句会出很隐蔽的 bug：finish() 在停留分支里被调用后，下一次 tick
+     * 又会进来把 legDone 清掉、leg 继续往前推（此时 leg 已等于 totalLegs），
+     * 于是状态字段被反复改写、进度卡在 75%，表现为"永远跑不完"。
+     */
+    if (t.status !== 'running') {
+      return
+    }
+
+    const speed = CFG.LIMITS.demo_speed_mps
+    t.elapsed += dt
+
+    /* --- 正在航点上停留 --- */
+    if (t.dwellLeft > 0) {
+      t.dwellLeft -= dt
+      if (t.dwellLeft <= 0) {
+        t.dwellLeft = 0
+        /* 判据要与 arrive 里一致：刚停留完的是不是**最后一个**航点 */
+        if (t.leg + 1 >= t.points.length - 1) {
+          /* 最后一个航点停留结束 —— 整条路线到这里才算真正走完 */
+          finish(t, '路线执行完毕，未发现异常')
+          return
+        }
+        t.leg += 1
+        t.legProgress = 0
+        t.legDone = false
+        const nt = t.points[t.leg + 1]
+        t.detail = nt
+          ? ('离开 ' + t.points[t.leg].name + '，前往 ' + nt.name)
+          : '路线执行完毕'
+      }
+      return
+    }
+
+    if (t.legDone || t.leg + 1 > t.points.length - 1) {
+      return
+    }
+
+    /* --- 正常行进：这一段是从 points[leg] 到 points[leg+1] --- */
+    const from = t.points[t.leg]
+    const to = t.points[t.leg + 1]
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const len = Math.sqrt(dx * dx + dy * dy)
+
+    if (len < 1e-6) {
+      t.legProgress = 1
+    } else {
+      t.legProgress += (speed * dt) / len
+    }
+    if (t.legProgress > 1) {
+      t.legProgress = 1
+    }
+    t.x = from.x + dx * t.legProgress
+    t.y = from.y + dy * t.legProgress
+    t.yaw = Math.atan2(dy, dx)
+
+    if (t.legProgress >= 1) {
+      arrive(t)
+    } else {
+      t.detail = '行进中 ' + Math.round(t.legProgress * 100) + '% → ' + to.name
+    }
+  }
+
+  function fmt(v) {
+    return v.toFixed(2)
+  }
+
+  function finish(t, detail) {
+    t.status = 'done'
+    t.detail = detail
+    /*
+     * 必须把 leg 推到终点、legProgress 归 1：
+     * 进度 = (leg + legProgress) / (totalLegs + 1)。最后一个航点到达时
+     * leg 还停在 totalLegs - 1，不收尾的话界面会显示 75% + "已完成"，
+     * 一眼就是个假数字。
+     */
+    t.leg = t.totalLegs
+    t.legProgress = 1
+    t.legDone = true
+    t.dwellLeft = 0
+    t.finishedAt = clock
+  }
+
+  /**
+   * 阈值主动：连续 N 秒收不到回执 → 判失联 → 阻塞。
+   * 返回 true 表示这次判定把任务转成了阻塞（调用方据此不再重复处理）。
+   */
+  function judgeTimeout(t, zid, events) {
+    if (t.silent || clock - t.lastReceiptAt > CFG.LIMITS.receipt_timeout_s * 1000) {
+      t.status = 'blocked'
+      t.reason = t.silent ? 'silent' : 'timeout'
+      t.detail = '连续 ' + CFG.LIMITS.receipt_timeout_s + ' 秒未收到回执，判定失联'
+      t.finishedAt = clock
+      events.push({
+        type: 'blocked',
+        zoneId: zid,
+        text: '连续 ' + CFG.LIMITS.receipt_timeout_s + ' 秒未收到 ' + t.robot + ' 回报，判定失联，已将其区域顺延。'
+      })
+      return true
+    }
+    /* 时限判定：整条路线跑太久（不是卡在某一步）也算异常，但优先级低于失联 */
+    if (t.elapsed > CFG.LIMITS.task_deadline_s) {
+      t.status = 'blocked'
+      t.reason = 'deadline'
+      t.detail = '超过任务时限 ' + CFG.LIMITS.task_deadline_s + ' 秒'
+      t.finishedAt = clock
+      events.push({ type: 'blocked', zoneId: zid, text: t.zoneName + ' 超过时限，任务挂起。' })
+      return true
+    }
+    return false
+  }
+
+  /**
+   * 时钟推进：先推进虚拟时钟，再跑所有 running 任务，并做两类**主动判定**。
+   * 返回本 tick 产生的事件列表（供界面/Agent 主动告警用）。
+   *
+   * dt 单位秒，由调用方给「距上次 tick 真实过了多久」。
+   */
+  function tick(dt) {
+    const step = typeof dt === 'number' && dt > 0 ? dt : 0
+    clock += step * 1000
+    const events = []
+
+    for (let i = 0; i < CFG.ZONES.length; i += 1) {
+      const zid = CFG.ZONES[i].id
+      const t = tasks[zid]
+      if (!t || t.status !== 'running') {
+        continue
+      }
+
+      /*
+       * 判定顺序很重要：**先判失联，再推进**。
+       * 反过来的话，正常行进中的车会在 advance 里刷新回执时间，
+       * 于是「静默的车」永远判不出来（这个顺序 bug 是测试抓到的）。
+       */
+      if (judgeTimeout(t, zid, events)) {
+        continue
+      }
+      advance(t, step)
+      /* 只要还在跑就算收到回执（含原地停留阶段），静默的车不发 */
+      receipt(t)
+      if (t.status === 'done') {
+        events.push({
+          type: 'done',
+          zoneId: zid,
+          text: t.zoneName + ' 已完成（' + Math.round(t.elapsed) + ' 秒）。'
+        })
+      }
+    }
+    return events
+  }
+
+  /**
+   * 让某台车「不回话」：它的任务在下一次 tick 就会被判失联。
+   * 这是把方案二的「阈值主动」做成**可复现演示**的抓手——不用真去拔网线。
+   */
+  function silence(zoneId) {
+    const t = tasks[zoneId]
+    if (!t) {
+      return { ok: false, message: '该区域没有任务' }
+    }
+    t.silent = true
+    return { ok: true, message: t.robot + ' 回执通道已静默（下一次判定即失联）' }
+  }
+
+  /** 恢复回话 */
+  function unsilence(zoneId) {
+    const t = tasks[zoneId]
+    if (!t) {
+      return { ok: false, message: '该区域没有任务' }
+    }
+    t.silent = false
+    t.lastReceiptAt = clock
+    return { ok: true, message: t.robot + ' 回执通道已恢复' }
+  }
+
+  function now() {
+    return clock
+  }
+
+  /** 派单后启动（pending → running） */
+  function start(zoneId) {
+    const t = tasks[zoneId]
+    if (!t) {
+      return { ok: false, message: '该区域没有任务' }
+    }
+    if (t.status !== 'pending') {
+      return { ok: false, message: t.zoneName + ' 当前是' + STATUS[t.status].text + '，无法启动' }
+    }
+    t.status = 'running'
+    t.startedAt = clock
+    t.lastReceiptAt = clock
+    t.elapsed = 0
+    t.detail = '路线开始，前往 ' + (t.points[1] ? t.points[1].name : '终点')
+    return { ok: true, message: t.zoneName + ' 已开始执行' }
+  }
+
+  /**
+   * 一键「开始本轮巡检」：开新一轮 → 派单所有区域 → 立即启动。
+   * 这是演示里的主按钮。
+   *
+   * 注意：**不在这里复位车辆在线状态** —— 「置离线」是给人看的故障注入，
+   * 要能一直留到演示者手动恢复，否则"离线车不派单"这条就演示不出来了。
+   * 需要恢复时用 resetCars()。
+   */
+  function startRound() {
+    round += 1
+    tasks = {}
+    const msgs = []
+    let started = 0
+    for (let i = 0; i < CFG.ZONES.length; i += 1) {
+      const zid = CFG.ZONES[i].id
+      const r = dispatch(zid)
+      if (!r.ok) {
+        msgs.push(CFG.zoneById(zid).name + '：' + r.message)
+        continue
+      }
+      const s = start(zid)
+      if (s.ok) {
+        started += 1
+      } else {
+        msgs.push(s.message)
+      }
+    }
+    return {
+      ok: started > 0,
+      round: round,
+      started: started,
+      message: '第 ' + round + ' 轮已开始，' + started + ' 个区域派单成功' +
+        (msgs.length ? '；' + msgs.join('；') : '')
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 模拟故障注入（演示功能三用；同时是测试的抓手）
+   * ------------------------------------------------------------------ */
+
+  /** 让某台车「遇障停车」：任务立刻转阻塞，理由 obstacle。 */
+  function injectObstacle(zoneId, note) {
+    const t = tasks[zoneId]
+    if (!t) {
+      return { ok: false, message: '该区域没有任务' }
+    }
+    if (t.status !== 'running' && t.status !== 'pending') {
+      return { ok: false, message: t.zoneName + ' 当前是' + STATUS[t.status].text + '，无法注入故障' }
+    }
+    t.status = 'blocked'
+    t.reason = 'obstacle'
+    t.detail = note || '前方有障碍，已停车待处置'
+    t.finishedAt = clock
+    return {
+      ok: true,
+      message: t.robot + ' 遇到障碍已停止，其余车辆保持原位，建议单独改派或取消。'
+    }
+  }
+
+  /** 让某台车掉线（用于演示离线车不被派单） */
+  function setCarOnline(carId, online) {
+    const car = CFG.carById(carId)
+    if (!car) {
+      return { ok: false, message: '车辆不存在' }
+    }
+    car.online = !!online
+    return { ok: true, message: car.name + (online ? ' 已上线' : ' 已离线') }
+  }
+
+  /**
+   * 把所有车辆恢复在线。
+   * 「置离线」是给人看的故障注入，一旦点过就会留在状态里；
+   * 演示/测试要恢复到干净起点时调这个，而不是偷偷在别处复位。
+   */
+  function resetCars() {
+    for (let i = 0; i < CFG.CARS.length; i += 1) {
+      CFG.CARS[i].online = true
+    }
+    return { ok: true, message: '四台车已恢复为在线' }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 功能四：覆盖汇总 + 轮次台账
+   * ------------------------------------------------------------------ */
+
+  /** 每个区域的展示态（含由车在线状态推导出来的离线态） */
+  function zoneStates() {
+    const out = []
+    for (let i = 0; i < CFG.ZONES.length; i += 1) {
+      const z = CFG.ZONES[i]
+      const t = tasks[z.id]
+      const car = CFG.carById(z.car)
+      let status = 'pending'
+      let detail = '等待派单'
+      let progress = 0
+      let taskId = ''
+      if (t) {
+        status = t.status
+        detail = t.detail
+        taskId = t.taskId
+        progress = t.totalLegs > 0
+          ? Math.round(((t.leg + t.legProgress) / (t.totalLegs + 1)) * 100)
+          : (t.status === 'done' ? 100 : 0)
+        if (t.status === 'done') {
+          progress = 100
+        }
+      }
+      if (car && !car.online && status !== 'done') {
+        status = 'offline'
+        detail = car.name + ' 离线，任务未派出'
+      }
+      /* 任务实际派给的那台车可能**不是**登记车（改派之后就不一样了）。
+         两个都暴露出去：界面显示"谁在执行"要用 taskCar，
+         而"这个区域的登记车是谁"用 car。只给 car 会让人误以为改派没生效。 */
+      const taskCar = car && t && t.robot ? (CFG.carById(t.robot) || null) : null
+      out.push({
+        id: z.id,
+        name: z.name,
+        route: z.route,
+        routeName: CFG.ROUTES[z.route].name,
+        routeDesc: CFG.ROUTES[z.route].desc,
+        car: z.car,
+        carName: car ? car.name : z.car,
+        taskCar: t && t.robot ? t.robot : '',
+        taskCarName: taskCar ? taskCar.name : (t && t.robot ? t.robot : '—'),
+        status: status,
+        statusText: STATUS[status].text,
+        color: STATUS[status].color,
+        detail: detail,
+        progress: progress,
+        taskId: taskId,
+        lengthM: CFG.routeLength(z.route).toFixed(1)
+      })
+    }
+    return out
+  }
+
+  /** 各区域车辆的当前位置（供地图页画小车标记；没有任务的区域不出现） */
+  function vehiclePositions() {
+    const out = {}
+    for (let i = 0; i < CFG.ZONES.length; i += 1) {
+      const zid = CFG.ZONES[i].id
+      const t = tasks[zid]
+      if (!t) {
+        continue
+      }
+      out[zid] = {
+        x: t.x,
+        y: t.y,
+        yaw: t.yaw,
+        leg: t.leg,
+        totalLegs: t.totalLegs,
+        progress: t.status === 'done'
+          ? 100
+          : (t.totalLegs > 0
+            ? Math.round(((t.leg + t.legProgress) / (t.totalLegs + 1)) * 100)
+            : 0),
+        status: t.status
+      }
+    }
+    return out
+  }
+
+  /**
+   * 覆盖汇总：功能四只汇总**任务状态**，
+   * 不传输实时视频、不承诺视觉识别结论。
+   */
+  function summarize() {
+    const counts = { pending: 0, running: 0, done: 0, blocked: 0, cancelled: 0, offline: 0 }
+    const zs = zoneStates()
+    for (let i = 0; i < zs.length; i += 1) {
+      counts[zs[i].status] += 1
+    }
+    const needAction = counts.blocked + counts.offline
+    return {
+      round: round,
+      total: zs.length,
+      counts: counts,
+      doneText: counts.done + ' / ' + zs.length,
+      needAction: needAction
+    }
+  }
+
+  /** 本轮一句话结论（也可直接由 Agent 朗读） */
+  function summaryLine() {
+    const s = summarize()
+    if (s.round === 0) {
+      return '尚未开始巡检'
+    }
+    const parts = []
+    const zs = zoneStates()
+    for (let i = 0; i < zs.length; i += 1) {
+      parts.push(zs[i].name + zs[i].statusText)
+    }
+    return '第 ' + s.round + ' 轮：' + parts.join('、')
+  }
+
+  /** 收轮：把本轮结果写进台账，形成可追溯记录 */
+  function closeRound() {
+    const zs = zoneStates()
+    if (round === 0) {
+      return { ok: false, message: '还没有开始过巡检' }
+    }
+    const zones = zs.map(function (z) {
+      return { name: z.name, result: z.status, resultText: z.statusText }
+    })
+    const s = summarize()
+    let summary
+    if (s.needAction > 0) {
+      summary = s.counts.done + ' 区已完成，' + s.counts.blocked + ' 区阻塞待处置，' + s.counts.offline + ' 区车辆离线'
+    } else if (s.counts.running > 0 || s.counts.pending > 0) {
+      summary = '本轮尚未走完，' + s.counts.done + ' 区已收回结果'
+    } else {
+      summary = '四区全部完成，本轮无异常'
+    }
+    const rec = { round: '第 ' + round + ' 轮', time: nowText(), zones: zones, summary: summary }
+    records.unshift(rec)
+    if (records.length > 12) {
+      records.pop()
+    }
+    return { ok: true, record: rec, message: '第 ' + round + ' 轮已归档：' + summary }
+  }
+
+  function getRecords() {
+    return records.map(function (r) {
+      return { round: r.round, time: r.time, summary: r.summary, zones: r.zones.slice() }
+    })
+  }
+
+  /** 供「跨轮次记忆」用的摘要：上轮哪些区域没完成 */
+  function memoryOfLastRound() {
+    if (records.length === 0) {
+      return null
+    }
+    const last = records[0]
+    const bad = last.zones.filter(function (z) {
+      return z.result !== 'done'
+    })
+    if (bad.length === 0) {
+      return null
+    }
+    const names = bad.map(function (z) { return z.name }).join('、')
+    return { round: last.round, zones: names, text: last.round + ' ' + names + ' 未完成，本轮建议优先安排。' }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 订阅与快照
+   * ------------------------------------------------------------------ */
+  function onEvent(fn) {
+    emitter = fn
+  }
+
+  function emit(evt) {
+    if (emitter) {
+      emitter(evt)
+    }
+  }
+
+  function snapshot() {
+    return {
+      round: round,
+      zones: zoneStates(),
+      cars: CFG.CARS.map(function (c) {
+        return Object.assign({}, c)
+      }),
+      summary: summarize(),
+      summaryLine: summaryLine(),
+      records: getRecords(),
+      map: CFG.MAP,
+      waypoints: CFG.WAYPOINTS,
+      routes: CFG.ROUTES
+    }
+  }
+
+  /** 仅测试用：把状态机复位 */
+  function __reset() {
+    seq = 1000
+    round = 0
+    tasks = {}
+    records = []
+    emitter = null
+    clock = Date.now()
+  }
+
+  module.exports.default = {
+    dispatch: dispatch,
+    cancel: cancel,
+    cancelAll: cancelAll,
+    reassign: reassign,
+    postpone: postpone,
+    start: start,
+    startRound: startRound,
+    tick: tick,
+    silence: silence,
+    unsilence: unsilence,
+    now: now,
+    injectObstacle: injectObstacle,
+    setCarOnline: setCarOnline,
+    resetCars: resetCars,
+    zoneStates: zoneStates,
+    vehiclePositions: vehiclePositions,
+    summarize: summarize,
+    summaryLine: summaryLine,
+    closeRound: closeRound,
+    getRecords: getRecords,
+    memoryOfLastRound: memoryOfLastRound,
+    snapshot: snapshot,
+    onEvent: onEvent,
+    emit: emit
+  }
+
+    });
+
+    __def("styles", function (__req, __imp, module, exports) {
+  /**
+   * 公共样式（渲染进宿主页面的 <style>）
+   *
+   * 尺寸都按 **720×1280 竖屏**（openvela 官方 goldfish 模拟器的屏）设计，
+   * 触摸目标不小于 48px。浏览器预览用同一份 CSS，所以预览即所见。
+   *
+   * 只用最普通的 CSS 子集（flex / 圆角 / 颜色 / 字号），
+   * 不用伪类、CSS 变量、动画——快应用的样式引擎对这些支持有限。
+   */
+  const BASE_CSS = `
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0b1220; }
+  body {
+    font-family: -apple-system, "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+    color: #e2e8f0;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #app { width: 720px; min-height: 1280px; background: #0b1220; position: relative; }
+
+  .screen { padding: 18px 20px 10px 20px; }
+
+  /* ---------- 状态栏 ---------- */
+  .statusbar { display: flex; justify-content: space-between; align-items: center; height: 62px; }
+  .sb-left { display: flex; align-items: center; }
+  .sb-time { font-size: 30px; font-weight: 700; color: #fff; }
+  .sb-title { font-size: 20px; color: #64748b; margin-left: 14px; }
+  .sb-right { display: flex; align-items: center; }
+  .sb-battery { font-size: 20px; color: #94a3b8; margin-left: 12px; }
+
+  /* ---------- 通用组件 ---------- */
+  .chip {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 48px; padding: 0 18px; border-radius: 24px; margin-left: 10px;
+    font-size: 20px;
+  }
+  .btn {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 56px; padding: 0 22px; border-radius: 28px;
+    background: #23324f; color: #cbd5e1; font-size: 22px; margin-right: 12px;
+  }
+  .btn-primary { background: #2f6df6; color: #fff; font-weight: 700; }
+  .btn-danger { background: #7f1d1d; color: #fecaca; }
+  .btn-ghost { background: transparent; border: 1px solid #334155; }
+  .btn-sm { min-height: 44px; padding: 0 16px; font-size: 19px; border-radius: 22px; }
+
+  .card { background: #16223a; border-radius: 22px; padding: 16px 18px; margin-bottom: 12px; }
+  .row { display: flex; align-items: center; }
+  .row-between { display: flex; align-items: center; justify-content: space-between; }
+  .section-title { font-size: 21px; color: #7d8ea8; margin: 14px 0 8px 0; }
+  .muted { color: #7d8ea8; }
+  .small { font-size: 18px; }
+  .mono { font-family: Consolas, "DejaVu Sans Mono", monospace; }
+
+  .bar { height: 8px; border-radius: 4px; background: #24314d; overflow: hidden; margin-top: 10px; }
+  .bar-in { height: 8px; border-radius: 4px; }
+
+  /* ---------- 桌面磁贴 ---------- */
+  .grid { display: flex; flex-wrap: wrap; }
+  .tile {
+    width: 330px; height: 128px; margin: 0 16px 14px 0;
+    border-radius: 22px; background: #16223a;
+    display: flex; align-items: center; padding: 0 16px;
+  }
+  .tile:nth-child(2n) { margin-right: 0; }
+  .tile-icon {
+    width: 62px; height: 62px; border-radius: 18px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 700; color: #fff; margin-right: 14px;
+  }
+  .tile-name { font-size: 23px; font-weight: 700; color: #e2e8f0; }
+  .tile-sub { font-size: 18px; color: #7d8ea8; margin-top: 4px; }
+
+  /* ---------- 底部快捷坞 ---------- */
+  .dock { display: flex; align-items: center; height: 76px; margin-top: 8px; }
+  .dock .btn { margin-right: 12px; }
+
+  /* ---------- 英雄卡（本轮概览） ---------- */
+  .hero { background: #16223a; border-radius: 24px; padding: 14px 20px 16px 20px; }
+  .hero-main { font-size: 27px; font-weight: 700; color: #e2e8f0; margin: 6px 0 4px 0; }
+  .stats { display: flex; margin-top: 6px; }
+  .stat { flex: 1; display: flex; flex-direction: column; align-items: center; }
+  .stat-num { font-size: 30px; font-weight: 700; }
+  .stat-label { font-size: 18px; color: #7d8ea8; margin-top: 2px; }
+
+  /* ---------- 地图 ---------- */
+  .mapwrap { background: #0e1729; border-radius: 20px; overflow: hidden; }
+  .mapsvg { display: block; }
+
+  /* ---------- 列表 ---------- */
+  .lrow {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: #16223a; border-radius: 18px; margin-bottom: 10px;
+  }
+  .lrow-main { flex: 1; }
+  .lrow-title { font-size: 22px; font-weight: 700; color: #e2e8f0; }
+  .lrow-sub { font-size: 18px; color: #7d8ea8; margin-top: 3px; }
+  .dot { width: 12px; height: 12px; border-radius: 6px; margin-right: 10px; flex: none; }
+
+  /* ---------- 聊天 ---------- */
+  .chat { height: 640px; overflow-y: auto; padding-right: 4px; }
+  .msg { margin-bottom: 12px; display: flex; }
+  .msg-me { justify-content: flex-end; }
+  .bubble {
+    max-width: 560px; padding: 12px 16px; border-radius: 18px;
+    font-size: 21px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  }
+  .bubble-me { background: #2f6df6; color: #fff; }
+  .bubble-agent { background: #16223a; color: #e2e8f0; }
+  .bubble-sys { background: #1e293b; color: #94a3b8; font-size: 18px; }
+  .tools { font-size: 17px; color: #3ddc84; margin-top: 6px; }
+
+  /* ---------- 输入区 ---------- */
+  .inputbar { display: flex; align-items: center; margin-top: 10px; }
+  .input {
+    flex: 1; height: 62px; border-radius: 31px; background: #16223a;
+    border: 1px solid #24314d; color: #e2e8f0; font-size: 21px; padding: 0 20px;
+    outline: none;
+  }
+  .presets { display: flex; flex-wrap: wrap; margin-top: 10px; }
+  .preset {
+    padding: 10px 16px; border-radius: 20px; background: #1b2942;
+    color: #a9c1e0; font-size: 19px; margin: 0 10px 10px 0;
+  }
+
+  /* ---------- 提示浮层 ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%);
+    max-width: 620px; padding: 14px 22px; border-radius: 20px;
+    background: #2f6df6; color: #fff; font-size: 21px; z-index: 99;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  }
+  .empty { padding: 40px 0; text-align: center; color: #64748b; font-size: 21px; }
+  .kv { display: flex; justify-content: space-between; font-size: 19px; padding: 5px 0; }
+  .kv-k { color: #7d8ea8; }
+  .kv-v { color: #cbd5e1; }
+  `
+
+  module.exports.default = { BASE_CSS: BASE_CSS }
+
+    });
+
+    __def("tpl", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 极简模板引擎（数据 → HTML 字符串）
+   *
+   * 为什么不用 .ux 的声明式模板 + 框架级重渲染：
+   *   那套要求在 openvela 的真快应用运行时里跑，而这个工程还要在
+   *   Windows 浏览器里预览、在 Node 里单测。改成「渲染成字符串」后，
+   *   同一份模板只依赖一个**纯函数**，三处行为完全一致，也就能被断言。
+   *
+   * 语法（够用就好，绝不扩张）：
+   *   {{expr}}            插值，**默认 HTML 转义**
+   *   {{{expr}}}          插值，不转义（只给已经自己拼好的 SVG 用）
+   *   {{if:cond}} … {{/if}}                 条件块
+   *   {{if:cond}} … {{else}} … {{/if}}      条件块带 else
+   *   {{each:list}} … {{/each}}             循环，循环体里可用 $item / $index
+   *
+   * 块可以任意嵌套，`if`/`each` 都可以带序号（`{{if1:…}}{{/if1}}`）以便配对更直观。
+   *
+   * ------------------------------------------------------------------ *
+   * 实现要点（踩过的坑，别改回去）
+   *
+   * 渲染必须是**递归**的：在**当前这一层**找块，遇到 each 就把循环体
+   * 「带着 $item 再渲染一遍」，遇到 if 就按条件决定展开哪一支。
+   *
+   * 早期版本是"整体扫描、反复展开最内层块"的扁平算法，必然出错：
+   *   模板 {{each:l}}{{if:$item.ok}}O{{/if}}{{/each}}
+   *   里的 if 在 each 提供 $item **之前**就被求值了，条件为假 → 整块被吃掉。
+   *   表现就是"循环里嵌的条件/循环永远不显示"，而且外层 each 越深越明显。
+   * 递归写法从结构上避免了这个问题：内层块只在拿到 $item 的上下文里才被渲染。
+   */
+
+  /** HTML 转义 */
+  function escapeHtml(s) {
+    if (s === undefined || s === null) {
+      return ''
+    }
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  }
+
+  /** 表达式求值。出错不抛，返回空串并把错误记进 ctx.__errors（测试据此发现拼错的名字） */
+  function evaluate(expr, ctx) {
+    try {
+      const fn = new Function('__c', 'with (__c) { return (' + expr + '); }')
+      const v = fn(ctx)
+      return v === undefined || v === null ? '' : v
+    } catch (e) {
+      if (ctx && ctx.__errors && ctx.__errors.push) {
+        ctx.__errors.push({ expr: expr, message: e && e.message ? e.message : String(e) })
+      }
+      return ''
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 词法：把模板切成「文本 / 块开关」，并算出每个块配对的闭合标签
+   * ------------------------------------------------------------------ */
+  const TOKEN_RE = /\{\{(if\d*|each\d*):([^}]*)\}\}|\{\{\/(if\d*|each\d*)\}\}/g
+
+  function tokenize(tpl) {
+    const tokens = []
+    TOKEN_RE.lastIndex = 0
+    let m
+    while ((m = TOKEN_RE.exec(tpl)) !== null) {
+      if (m[1] !== undefined) {
+        tokens.push({ kind: 'open', tag: m[1], arg: m[2].trim(), start: m.index, end: m.index + m[0].length })
+      } else {
+        tokens.push({ kind: 'close', tag: m[3], start: m.index, end: m.index + m[0].length })
+      }
+    }
+    /* 栈配对：给每个 open 记下它对应的 close 下标 */
+    const stack = []
+    for (let i = 0; i < tokens.length; i += 1) {
+      const tk = tokens[i]
+      if (tk.kind === 'open') {
+        stack.push(tk)
+        continue
+      }
+      let at = -1
+      for (let j = stack.length - 1; j >= 0; j -= 1) {
+        if (stack[j].tag === tk.tag) { at = j; break }
+      }
+      if (at < 0) {
+        continue
+      }
+      stack[at].pairIndex = i
+      stack.splice(at, 1)
+    }
+    return tokens
+  }
+
+  /** 渲染一段模板（在当前 ctx 下） */
+  function renderSequence(tpl, ctx) {
+    const tokens = tokenize(tpl)
+    let out = ''
+    let pos = 0
+    let i = 0
+
+    while (i < tokens.length) {
+      const tk = tokens[i]
+
+      if (tk.kind === 'close' || tk.pairIndex === undefined) {
+        /* 孤立/未配对的标签：原样当文本输出，便于测试发现写错 */
+        out += interpolate(tpl.slice(pos, tk.end), ctx)
+        pos = tk.end
+        i += 1
+        continue
+      }
+
+      /* 标签之前的普通文本 */
+      out += interpolate(tpl.slice(pos, tk.start), ctx)
+
+      const bodyStart = tk.end
+      const bodyEnd = tokens[tk.pairIndex].start
+      const body = tpl.slice(bodyStart, bodyEnd)
+
+      if (tk.tag.indexOf('each') === 0) {
+        const list = evaluate(tk.arg, ctx)
+        if (list && typeof list.length === 'number') {
+          const parts = []
+          for (let k = 0; k < list.length; k += 1) {
+            /* 每轮用一个继承自 ctx 的子上下文，挂上 $item / $index */
+            const sub = Object.create(ctx || null)
+            sub.$item = list[k]
+            sub.$index = k
+            sub.__errors = ctx ? ctx.__errors : []
+            parts.push(renderSequence(body, sub))
+          }
+          out += parts.join('')
+        }
+      } else {
+        const elseTag = '{{else}}'
+        const eIdx = body.indexOf(elseTag)
+        const truthy = !!evaluate(tk.arg, ctx)
+        if (eIdx >= 0) {
+          out += renderSequence(truthy ? body.slice(0, eIdx) : body.slice(eIdx + elseTag.length), ctx)
+        } else if (truthy) {
+          out += renderSequence(body, ctx)
+        }
+      }
+
+      pos = tokens[tk.pairIndex].end
+      i = tk.pairIndex + 1
+    }
+
+    out += interpolate(tpl.slice(pos), ctx)
+    return out
+  }
+
+  /** 把一段纯文本里的 {{ }} / {{{ }}} 求值掉 */
+  function interpolate(text, ctx) {
+    if (text.indexOf('{{') < 0) {
+      return text
+    }
+    let out = text.replace(/\{\{\{([^}]+)\}\}\}/g, function (m, expr) {
+      const v = evaluate(expr.trim(), ctx)
+      return v === '' ? '' : String(v)
+    })
+    out = out.replace(/\{\{([^}]+)\}\}/g, function (m, expr) {
+      const v = evaluate(expr.trim(), ctx)
+      return v === '' ? '' : escapeHtml(v)
+    })
+    return out
+  }
+
+  /**
+   * 渲染模板。
+   * @param {string} tpl  模板串
+   * @param {object} ctx  数据对象（页面的 data() 结果，可再挂辅助函数）
+   * @returns {string} HTML
+   */
+  function render(tpl, ctx) {
+    const data = ctx || {}
+    if (!data.__errors) {
+      data.__errors = []
+    }
+    return renderSequence(String(tpl), data)
+  }
+
+  /** 检查模板块是否配对——编译期就能发现问题，不留到运行时 */
+  function checkTemplate(tpl) {
+    const problems = []
+    const tokens = tokenize(String(tpl))
+    const stack = []
+    for (let i = 0; i < tokens.length; i += 1) {
+      const tk = tokens[i]
+      if (tk.kind === 'open') {
+        stack.push(tk)
+      } else {
+        let at = -1
+        for (let j = stack.length - 1; j >= 0; j -= 1) {
+          if (stack[j].tag === tk.tag) { at = j; break }
+        }
+        if (at < 0) {
+          problems.push('多余的闭合标签：{{/' + tk.tag + '}}')
+        } else {
+          stack.splice(at, 1)
+        }
+      }
+    }
+    for (let i = 0; i < stack.length; i += 1) {
+      problems.push('未闭合的块：{{' + stack[i].tag + ':' + stack[i].arg + '}}')
+    }
+    const open3 = tpl.match(/\{\{\{/g)
+    const close3 = tpl.match(/\}\}\}/g)
+    if ((open3 ? open3.length : 0) !== (close3 ? close3.length : 0)) {
+      problems.push('{{{ }}} 数量不匹配')
+    }
+    return problems
+  }
+
+  module.exports.default = { render: render, escapeHtml: escapeHtml, checkTemplate: checkTemplate }
+
+    });
+
+    __def("ui", function (__req, __imp, module, exports) {
+  /**
+   * VelaGuard · 界面小工具（提示 + 时钟）
+   *
+   * 为什么不直接用 `@system.prompt`：
+   *   快应用的 prompt 是**异步系统调用**，在浏览器预览里没有对应实现。
+   *   这里做一个仓内实现：提示自己画成浮层（两处行为完全一致，预览即所见），
+   *   时钟也由自己维护，不依赖宿主定时器。
+   */
+
+  let toastText = ''
+  let toastUntil = 0
+  let listener = null
+
+  /** 显示一条提示（默认 2.2 秒） */
+  function toast(msg, ms) {
+    toastText = String(msg === undefined || msg === null ? '' : msg)
+    toastUntil = Date.now() + (ms || 2200)
+    if (listener) {
+      listener(toastText)
+    }
+    return toastText
+  }
+
+  /** 当前该显示的提示文本（过期自动变空） */
+  function toastNow() {
+    if (Date.now() > toastUntil) {
+      return ''
+    }
+    return toastText
+  }
+
+  function clearToast() {
+    toastText = ''
+    toastUntil = 0
+    if (listener) {
+      listener('')
+    }
+  }
+
+  function onToast(fn) {
+    listener = fn
+  }
+
+  /** 两位补零 */
+  function pad(n) {
+    return n < 10 ? '0' + n : '' + n
+  }
+
+  /**
+   * 时间文案。
+   * 显示**年月日 + 时分秒**，因为设备/模拟器的 RTC 不一定准，
+   * 只显示 HH:MM 时出问题根本看不出是哪天（M1 上踩过这个坑）。
+   */
+  function clockText(d) {
+    const t = d || new Date()
+    return t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()) +
+      ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds())
+  }
+
+  /** 短时间（HH:MM），给列表行用 */
+  function clockShort(d) {
+    const t = d || new Date()
+    return pad(t.getHours()) + ':' + pad(t.getMinutes())
+  }
+
+  module.exports.default = {
+    toast: toast,
+    toastNow: toastNow,
+    clearToast: clearToast,
+    onToast: onToast,
+    clockText: clockText,
+    clockShort: clockShort
+  }
+
+    });
+
+    __def("Dispatch", function (__req, __imp, module, exports) {
+  /**
+   * 页面：巡检调度台（Dispatch）
+   *
+   * 功能二「任务派单与结果回收」的界面落点：
+   *   · 车辆卡：在线 / 电量 / 当前任务
+   *   · 任务清单：任务序号、目标区域、路线、五种状态、进度
+   *   · 每个任务可 开始 / 取消 / 改派 / 顺延（功能三的人工处置）
+   *   · 车辆卡可一键切换在线/离线，用来演示「离线车不得被派单」
+   *   · 底部可注入故障，用来演示「事件主动告警」与「阈值主动判失联」
+   */
+  const store = __imp(__mod("store"));
+  const CFG = __imp(__mod("data"));
+  let toastText = ''
+
+  const title = '巡检调度台'
+
+  function data(ctx) {
+    const snap = store.snapshot()
+    const zoneList = snap.zones.map(function (z) {
+      return {
+        id: z.id,
+        name: z.name,
+        route: z.route,
+        routeName: z.routeName,
+        routeDesc: z.routeDesc,
+        /* 注意区分两个字段：
+         *   car     = 区域登记表里绑定的那台车
+         *   taskCar = 本区域**当前任务实际派给**的车（改派后会不同）
+         * 界面上"任务由谁执行"要用 taskCar，用 car 会出现
+         * "改派成功了但界面还写着原车"的假象（测试抓到过）。 */
+        car: z.car,
+        taskCar: z.taskCar,
+        carName: z.carName,
+        taskCarName: z.taskCarName,
+        status: z.status,
+        statusText: z.statusText,
+        color: z.color,
+        detail: z.detail,
+        progress: z.progress,
+        taskId: z.taskId || '—',
+        lengthM: z.lengthM,
+        canStart: z.status === 'pending',
+        canCancel: z.status === 'running' || z.status === 'pending' || z.status === 'blocked',
+        canReassign: z.status === 'blocked' || z.status === 'offline',
+        canPostpone: z.status === 'blocked' || z.status === 'offline'
+      }
+    })
+    const cars = snap.cars.map(function (c) {
+      const busy = zoneList.filter(function (z) {
+        return z.car === c.id && (z.status === 'running' || z.status === 'pending')
+      })[0]
+      return {
+        id: c.id,
+        name: c.name,
+        ip: c.ip,
+        online: c.online,
+        battery: c.battery,
+        statusText: c.online ? (busy ? busy.statusText + '：' + busy.name : '空闲') : '离线',
+        color: c.online ? (busy ? busy.color : '#3DDC84') : '#FBBF24',
+        toggleText: c.online ? '置离线' : '置在线'
+      }
+    })
+
+    return {
+      clock: ctx.clock,
+      toast: toastText,
+      zones: zoneList,
+      cars: cars,
+      round: snap.round,
+      total: snap.summary.total,
+      timeout: CFG.LIMITS.receipt_timeout_s
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}} · 第 {{round}} 轮</span>
+      </div>
+      <div class="sb-right"><div class="btn btn-sm btn-ghost" data-act="back">返回</div></div>
+    </div>
+
+    <div class="section-title">车队（{{total}} 区 / 4 车）</div>
+    {{each:cars}}
+    <div class="lrow">
+      <div class="lrow-main">
+        <div class="row">
+          <div class="dot" style="background:{{$item.color}}"></div>
+          <span class="lrow-title">{{$item.name}}</span>
+          <span class="small muted" style="margin-left:10px">{{$item.ip}}</span>
+        </div>
+        <div class="lrow-sub">{{$item.statusText}}{{if1:$item.online}} · 电量 {{$item.battery}}%{{/if1}}</div>
+      </div>
+      <div class="btn btn-sm btn-ghost" data-act="toggleCar" data-tid="{{$item.id}}">{{$item.toggleText}}</div>
+    </div>
+    {{/each}}
+
+    <div class="section-title">任务清单</div>
+    {{each:zones}}
+    <div class="card">
+      <div class="row-between">
+        <div class="row">
+          <div class="dot" style="background:{{$item.color}}"></div>
+          <span class="lrow-title">{{$item.name}}</span>
+          <span class="small muted" style="margin-left:10px">{{$item.taskId}}</span>
+        </div>
+        <span style="color:{{$item.color}};font-size:20px;font-weight:700">{{$item.statusText}}</span>
+      </div>
+      <div class="lrow-sub" style="margin-top:8px">
+        {{$item.taskCarName}} · {{$item.routeName}}（{{$item.lengthM}} m）· {{$item.routeDesc}}
+      </div>
+      <div class="lrow-sub" style="margin-top:4px">{{$item.detail}}</div>
+      <div class="bar"><div class="bar-in" style="width:{{$item.progress}}%;background:{{$item.color}}"></div></div>
+      <div class="row" style="margin-top:12px">
+        {{if:$item.canStart}}<div class="btn btn-sm btn-primary" data-act="start" data-tid="{{$item.id}}">开始</div>{{/if}}
+        {{if:$item.canReassign}}<div class="btn btn-sm btn-primary" data-act="reassign" data-tid="{{$item.id}}">改派</div>{{/if}}
+        {{if:$item.canPostpone}}<div class="btn btn-sm" data-act="postpone" data-tid="{{$item.id}}">顺延</div>{{/if}}
+        {{if:$item.canCancel}}<div class="btn btn-sm btn-danger" data-act="cancel" data-tid="{{$item.id}}">取消</div>{{/if}}
+      </div>
+    </div>
+    {{/each}}
+
+    <div class="section-title">异常注入（演示功能三用）</div>
+    <div class="row">
+      <div class="btn btn-sm" data-act="inject" data-tid="Z1">1 号车遇障</div>
+      <div class="btn btn-sm" data-act="inject" data-tid="Z2">2 号车遇障</div>
+      <div class="btn btn-sm" data-act="silence" data-tid="Z3">3 号车失联</div>
+      <div class="btn btn-sm btn-ghost" data-act="resetCars">车辆恢复在线</div>
+    </div>
+    <div class="lrow-sub" style="margin-top:8px">
+      「遇障」让该区域立刻转阻塞；「失联」让该车不再回执，下一次判定即按阈值判失联（{{timeout}} 秒）。
+    </div>
+
+    <div class="dock">
+      <div class="btn btn-primary" data-act="startRound">开始本轮巡检</div>
+      <div class="btn btn-danger" data-act="cancelAll">一键取消</div>
+      <div class="btn" data-act="go" data-tid="Map">看地图</div>
+    </div>
+  </div>
+  {{if:toast}}<div class="toast">{{toast}}</div>{{/if}}
+  `
+
+  const act = {
+    back: function (ctx) { ctx.go('Home'); return false },
+    go: function (ctx, tid) { ctx.go(tid); return false },
+    start: function (ctx, tid) {
+      toastText = store.start(tid).message
+      return true
+    },
+    cancel: function (ctx, tid) {
+      toastText = store.cancel(tid).message
+      return true
+    },
+    reassign: function (ctx, tid) {
+      const r = store.reassign(tid)
+      toastText = r.message
+      /* 自证探针：自动化测试靠它区分"点击没到"与"改派没换车" */
+      if (typeof globalThis !== 'undefined' && globalThis.__vgProbe) {
+        globalThis.__vgProbe.push('reassign(' + tid + ') → ' + r.message)
+      }
+      return true
+    },
+    postpone: function (ctx, tid) {
+      toastText = store.postpone(tid).message
+      return true
+    },
+    cancelAll: function () {
+      toastText = store.cancelAll().message
+      return true
+    },
+    startRound: function () {
+      toastText = store.startRound().message
+      return true
+    },
+    toggleCar: function (ctx, tid) {
+      const c = CFG.carById(tid)
+      toastText = store.setCarOnline(tid, !c.online).message
+      return true
+    },
+    inject: function (ctx, tid) {
+      toastText = store.injectObstacle(tid, '前方有障碍，已停车待处置').message
+      return true
+    },
+    silence: function (ctx, tid) {
+      toastText = store.silence(tid).message
+      return true
+    },
+    resetCars: function () {
+      toastText = store.resetCars().message
+      return true
+    }
+  }
+
+  function onLeave() {
+    toastText = ''
+  }
+
+  module.exports.default = { title: title, tpl: tpl, data: data, act: act, onLeave: onLeave }
+
+    });
+
+    __def("Home", function (__req, __imp, module, exports) {
+  /**
+   * 页面：桌面（Home）
+   *
+   * 手机式桌面：状态栏 → 本轮概览卡 → 六个应用磁贴 → 区域状态条 → 底部快捷坞。
+   * 保留原「手机触控式程序」的形态，磁贴换成与本版功能对应的六个入口。
+   */
+  const store = __imp(__mod("store"));
+  const title = 'VelaGuard 巡检桌面'
+
+  /** 应用注册表：加一个 app 只要在这里加一条 */
+  const APPS = [
+    { name: '巡检调度台', sub: '派单与状态', glyph: '调', page: 'Dispatch', color: '#2F6DF6' },
+    { name: '地图与路线', sub: '固定路线', glyph: '图', page: 'Map', color: '#0EA5A4' },
+    { name: '区域与任务', sub: '4 区 4 路线', glyph: '区', page: 'Zones', color: '#7C5CFF' },
+    { name: '巡检记录', sub: '按轮次回看', glyph: '记', page: 'Records', color: '#F59E0B' },
+    { name: '语音助手', sub: '端侧 AI 对话', glyph: '语', page: 'Voice', color: '#EC4899' },
+    { name: '系统与链路', sub: '数据源与通道', glyph: '设', page: 'System', color: '#64748B' }
+  ]
+
+  let toastText = ''
+
+  function data(ctx) {
+    const snap = store.snapshot()
+    const s = snap.summary
+    const online = snap.cars.filter(function (c) { return c.online }).length
+    const battery = snap.cars.reduce(function (m, c) { return c.online && c.battery > m ? c.battery : m }, 0)
+    const mem = store.memoryOfLastRound()
+
+    let line
+    if (s.round === 0) {
+      line = '尚未开始巡检，点下方「开始本轮巡检」'
+    } else if (s.needAction > 0) {
+      line = s.total + ' 区中 ' + s.counts.done + ' 区已完成，' + s.counts.blocked +
+        ' 区阻塞待处置，' + s.counts.offline + ' 区车辆离线'
+    } else if (s.counts.running > 0) {
+      line = '巡检进行中，已收回 ' + s.counts.done + ' 区结果'
+    } else if (s.counts.done === s.total) {
+      line = '四区全部完成，本轮无异常'
+    } else {
+      line = s.total + ' 区中 ' + s.counts.done + ' 区已完成'
+    }
+
+    return {
+      clock: ctx.clock,
+      toast: toastText,
+      apps: APPS,
+      tileStyle: function (a) { return 'background-color: ' + a.color },
+      round: s.round,
+      line: line,
+      counts: s.counts,
+      onlineText: online + ' / ' + snap.cars.length + ' 车在线',
+      battery: battery,
+      zoneChips: snap.zones,
+      memory: mem ? mem.text : '',
+      totalLen: (ctx.allRouteLength || 0).toFixed(1)
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}}</span>
+      </div>
+      <div class="sb-right">
+        <div class="chip" style="background:rgba(61,220,132,0.16)">
+          <span style="color:#3ddc84">模拟器演示</span>
+        </div>
+        <span class="sb-battery">{{onlineText}} · 电池 {{battery}}%</span>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="row-between">
+        <span class="small muted">本轮巡检 · 第 {{round}} 轮</span>
+        <span class="small muted">固定路线 {{totalLen}} m</span>
+      </div>
+      <div class="hero-main">{{line}}</div>
+      <div class="stats">
+        <div class="stat"><span class="stat-num" style="color:#3DDC84">{{counts.done}}</span><span class="stat-label">已完成</span></div>
+        <div class="stat"><span class="stat-num" style="color:#4DA3FF">{{counts.running}}</span><span class="stat-label">进行中</span></div>
+        <div class="stat"><span class="stat-num" style="color:#FF6B6B">{{counts.blocked}}</span><span class="stat-label">阻塞</span></div>
+        <div class="stat"><span class="stat-num" style="color:#94A3B8">{{counts.pending}}</span><span class="stat-label">待执行</span></div>
+        <div class="stat"><span class="stat-num" style="color:#FBBF24">{{counts.offline}}</span><span class="stat-label">离线</span></div>
+      </div>
+    </div>
+
+    {{if:memory}}
+    <div class="card" style="border-left:4px solid #f59e0b">
+      <span class="small" style="color:#fbbf24">跨轮次提醒：{{memory}}</span>
+    </div>
+    {{/if}}
+
+    <div class="section-title">全部应用</div>
+    <div class="grid">
+      {{each:apps}}
+      <div class="tile" data-act="go" data-tid="{{$item.page}}">
+        <div class="tile-icon" style="{{tileStyle($item)}}">{{$item.glyph}}</div>
+        <div>
+          <div class="tile-name">{{$item.name}}</div>
+          <div class="tile-sub">{{$item.sub}}</div>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="section-title">区域状态</div>
+    <div class="grid">
+      {{each:zoneChips}}
+      <div class="lrow" style="width:330px;margin-right:16px">
+        <div class="lrow-main">
+          <div class="row">
+            <div class="dot" style="background:{{$item.color}}"></div>
+            <span class="lrow-title">{{$item.name}}</span>
+          </div>
+          <div class="lrow-sub">{{$item.detail}}</div>
+        </div>
+        <span style="color:{{$item.color}};font-size:20px;font-weight:700">{{$item.statusText}}</span>
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="dock">
+      <div class="btn btn-primary" data-act="startRound">开始本轮巡检</div>
+      <div class="btn" data-act="closeRound">收轮归档</div>
+      <div class="btn btn-danger" data-act="cancelAll">一键取消</div>
+    </div>
+  </div>
+  {{if:toast}}<div class="toast">{{toast}}</div>{{/if}}
+  `
+
+  /**
+   * 页面动作。返回 true 表示需要重绘。
+   * 这些动作与 Skill（inspection.md）里给 Agent 的工具语义是一一对应的。
+   *
+   * ⚠️ `go` / `back` 这类**导航动作每个页面都必须定义**：
+   * 外壳是按 data-act 查**当前页面**的 act 表来派发的，少写一个，
+   * 那个按钮就是"点了没反应"。首页磁贴的跳转当初就是这么坏的，
+   * 而且渲染测试完全看不出来（DOM 里 data-act 都在），
+   * 只有**真实点击**才暴露——所以测试里补了点击用例。
+   */
+  const act = {
+    go: function (ctx, tid) { ctx.go(tid); return false },
+    back: function (ctx) { ctx.go('Home'); return false },
+    startRound: function () {
+      const r = store.startRound()
+      const mem = store.memoryOfLastRound()
+      toastText = r.message + (mem ? '；' + mem.text : '')
+      return true
+    },
+    closeRound: function () {
+      const r = store.closeRound()
+      toastText = r.message
+      return true
+    },
+    cancelAll: function () {
+      toastText = store.cancelAll().message
+      return true
+    }
+  }
+
+  function onLeave() {
+    toastText = ''
+  }
+
+  module.exports.default = { title: title, tpl: tpl, data: data, act: act, onLeave: onLeave, APPS: APPS }
+
+    });
+
+    __def("Map", function (__req, __imp, module, exports) {
+  /**
+   * 页面：地图与路线（Map）
+   *
+   * 这一页是「在已建模好的地图上有一条预设好的固定路线」的界面落点：
+   *   · 底图 = **车端真实 ROS 地图**（classroom.pgm，350×197 格）转出的矢量轮廓
+   *   · 四条固定路线画在真实地图坐标系上（米）
+   *   · 小车标记沿路线**逐段移动**，位置直接来自 store 里推进的状态
+   *
+   * 演示动效由宿主每 250 ms 推进一次 store 并重绘，本页只负责"把当前坐标画出来"。
+   */
+  const store = __imp(__mod("store"));
+  const CFG = __imp(__mod("data"));
+  const map = __imp(__mod("map"));
+  let toastText = ''
+
+  const title = '地图与路线'
+
+  function data(ctx) {
+    const snap = store.snapshot()
+    const pos = store.vehiclePositions()
+    const svg = map.renderMap({
+      zones: snap.zones,
+      tasks: pos,
+      width: 680,
+      height: map.MAP_LAYOUT.height
+    })
+
+    const running = snap.zones.filter(function (z) { return z.status === 'running' }).length
+
+    return {
+      clock: ctx.clock,
+      toast: toastText,
+      svg: svg,
+      mapName: CFG.MAP.name,
+      gridInfo: CFG.MAP.width.toFixed(1) + ' × ' + CFG.MAP.height.toFixed(1) +
+        ' m（' + CFG.MAP.resolution + ' m/格，原点 [' + CFG.MAP.origin.join(', ') + ']）',
+      source: '底图来自车端当前生效地图 classroom.pgm 的矢量轮廓（自动生成，仅用于画图）',
+      zones: snap.zones.map(function (z) {
+        const p = pos[z.id]
+        return {
+          id: z.id,
+          name: z.name,
+          car: z.car,
+          color: z.color,
+          statusText: z.statusText,
+          routeName: z.routeName,
+          progress: p ? p.progress : 0,
+          detail: p
+            ? ('第 ' + (p.leg + 1) + ' / ' + (p.totalLegs + 1) + ' 个航点 · ' + z.detail)
+            : '尚未派单',
+          lengthM: z.lengthM
+        }
+      }),
+      running: running,
+      totalLen: CFG.allRouteLength().toFixed(1),
+      gaps: CFG.MAP.gaps.length + ' 处外边界缺口（门洞/通道）'
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}}</span>
+      </div>
+      <div class="sb-right"><div class="btn btn-sm btn-ghost" data-act="back">返回</div></div>
+    </div>
+
+    <div class="mapwrap">{{{svg}}}</div>
+
+    <div class="row-between" style="margin-top:10px">
+      <span class="small muted">{{mapName}}</span>
+      <span class="small muted">{{gridInfo}}</span>
+    </div>
+    <div class="small muted" style="margin-top:2px">{{source}}</div>
+
+    <div class="section-title">四条固定路线 · 总长 {{totalLen}} m · 进行中 {{running}} 区</div>
+    {{each:zones}}
+    <div class="card" style="padding:12px 16px">
+      <div class="row-between">
+        <div class="row">
+          <div class="dot" style="background:{{$item.color}}"></div>
+          <span class="lrow-title">{{$item.name}}</span>
+          <span class="small muted" style="margin-left:10px">{{$item.car}} · {{$item.routeName}}（{{$item.lengthM}} m）</span>
+        </div>
+        <span style="color:{{$item.color}};font-size:20px;font-weight:700">{{$item.statusText}}</span>
+      </div>
+      <div class="lrow-sub" style="margin-top:6px">{{$item.detail}}</div>
+      <div class="bar"><div class="bar-in" style="width:{{$item.progress}}%;background:{{$item.color}}"></div></div>
+    </div>
+    {{/each}}
+
+    <div class="lrow-sub">
+      {{gaps}}。「停止 / 急停」永远优先于任何行进动作；车端本地安全逻辑最高优先，本端不接管电机。
+    </div>
+
+    <div class="dock">
+      <div class="btn btn-primary" data-act="startRound">开始本轮巡检</div>
+      <div class="btn btn-danger" data-act="cancelAll">一键取消</div>
+      <div class="btn" data-act="go" data-tid="Dispatch">调度台</div>
+    </div>
+  </div>
+  {{if:toast}}<div class="toast">{{toast}}</div>{{/if}}
+  `
+
+  const act = {
+    back: function (ctx) { ctx.go('Home'); return false },
+    go: function (ctx, tid) { ctx.go(tid); return false },
+    startRound: function () {
+      toastText = store.startRound().message
+      return true
+    },
+    cancelAll: function () {
+      toastText = store.cancelAll().message
+      return true
+    }
+  }
+
+  function onLeave() {
+    toastText = ''
+  }
+
+  module.exports.default = { title: title, tpl: tpl, data: data, act: act, onLeave: onLeave }
+
+    });
+
+    __def("Records", function (__req, __imp, module, exports) {
+  /**
+   * 页面：巡检记录（Records）
+   *
+   * 功能四「巡检覆盖的基础汇总」的台账部分：每轮四个区域的完成情况 + 一句话结论。
+   * 首期边界（写进方案里的）：**只汇总任务状态**，不传实时视频、不下视觉识别结论。
+   */
+  const store = __imp(__mod("store"));
+  const CFG = __imp(__mod("data"));
+  let toastText = ''
+
+  const title = '巡检记录'
+
+  function data(ctx) {
+    const snap = store.snapshot()
+    const mem = store.memoryOfLastRound()
+    const statusDict = CFG.STATUS
+
+    return {
+      clock: ctx.clock,
+      toast: toastText,
+      round: snap.round,
+      summaryLine: snap.summaryLine,
+      counts: snap.summary.counts,
+      total: snap.summary.total,
+      hasRecords: snap.records.length > 0,
+      recordCount: snap.records.length,
+      records: snap.records.map(function (r) {
+        return {
+          round: r.round,
+          time: r.time,
+          summary: r.summary,
+          zones: r.zones.map(function (z) {
+            const st = statusDict[z.result] || statusDict.pending
+            return {
+              name: z.name,
+              resultText: z.resultText || st.text,
+              color: st.color
+            }
+          })
+        }
+      }),
+      memory: mem ? mem.text : ''
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}}</span>
+      </div>
+      <div class="sb-right"><div class="btn btn-sm btn-ghost" data-act="back">返回</div></div>
+    </div>
+
+    <div class="hero">
+      <span class="small muted">本轮（第 {{round}} 轮）</span>
+      <div class="hero-main">{{summaryLine}}</div>
+      <div class="stats">
+        <div class="stat"><span class="stat-num" style="color:#3DDC84">{{counts.done}}</span><span class="stat-label">已完成</span></div>
+        <div class="stat"><span class="stat-num" style="color:#FF6B6B">{{counts.blocked}}</span><span class="stat-label">阻塞</span></div>
+        <div class="stat"><span class="stat-num" style="color:#FBBF24">{{counts.offline}}</span><span class="stat-label">离线</span></div>
+        <div class="stat"><span class="stat-num" style="color:#94A3B8">{{counts.pending}}</span><span class="stat-label">待执行</span></div>
+      </div>
+    </div>
+
+    {{if:memory}}
+    <div class="card" style="border-left:4px solid #f59e0b">
+      <span class="small" style="color:#fbbf24">跨轮次记忆：{{memory}}</span>
+    </div>
+    {{/if}}
+
+    <div class="section-title">历史轮次（{{recordCount}} 条）</div>
+    {{if:hasRecords}}
+    {{each:records}}
+    <div class="card">
+      <div class="row-between">
+        <span class="lrow-title">{{$item.round}}</span>
+        <span class="small muted">{{$item.time}}</span>
+      </div>
+      <div class="lrow-sub" style="margin-top:6px">{{$item.summary}}</div>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap">
+        {{each1:$item.zones}}
+        <div class="chip" style="background:#1b2942;min-height:42px">
+          <span style="color:{{$item.color}};font-size:19px">{{$item.name}} {{$item.resultText}}</span>
+        </div>
+        {{/each1}}
+      </div>
+    </div>
+    {{/each}}
+    {{else}}
+    <div class="empty">还没有归档的轮次。巡检跑完一轮后点「收轮归档」。</div>
+    {{/if}}
+
+    <div class="lrow-sub">
+      首期只汇总**任务状态**（已完成 / 未开始 / 阻塞 / 离线），不传实时视频、不下视觉识别结论。
+    </div>
+
+    <div class="dock">
+      <div class="btn btn-primary" data-act="closeRound">收轮归档</div>
+      <div class="btn" data-act="go" data-tid="Dispatch">调度台</div>
+    </div>
+  </div>
+  {{if:toast}}<div class="toast">{{toast}}</div>{{/if}}
+  `
+
+  const act = {
+    back: function (ctx) { ctx.go('Home'); return false },
+    go: function (ctx, tid) { ctx.go(tid); return false },
+    closeRound: function () {
+      toastText = store.closeRound().message
+      return true
+    }
+  }
+
+  function onLeave() {
+    toastText = ''
+  }
+
+  module.exports.default = { title: title, tpl: tpl, data: data, act: act, onLeave: onLeave }
+
+    });
+
+    __def("System", function (__req, __imp, module, exports) {
+  /**
+   * 页面：系统与链路（System）
+   *
+   * 把"这一版到底跑在哪、连的是什么"如实摊开，方便评委/队友一眼看清，
+   * 也避免把模拟器里的演示说成真车在跑。
+   *
+   * 重点写清三件事：
+   *   1. 三条链路各是谁：端侧（openvela）／边缘层（M1）／车端（ROS 2 小车）
+   *   2. 这一版**实际启用了哪条**（默认：端侧自包含演示，不碰真车）
+   *   3. 与真车对接时缺什么（车端路线执行节点 + 回执通道）
+   */
+  const store = __imp(__mod("store"));
+  const CFG = __imp(__mod("data"));
+  const agent = __imp(__mod("agent"));
+  let toastText = ''
+
+  const title = '系统与链路'
+
+  function data(ctx) {
+    const snap = store.snapshot()
+    const st = agent.status()
+
+    const links = [
+      {
+        name: '端侧 · openvela',
+        what: '任务状态机、异常判定、主动告警、覆盖汇总、跨轮次记忆',
+        how: '本快应用 + 仓内路由（不依赖未验证的系统 router 模块）',
+        state: '已启用',
+        color: '#3DDC84'
+      },
+      {
+        name: '端侧 AI · ai_agent',
+        what: '口语化理解与播报文本生成；按 Skill 调用它自己的工具',
+        how: '@system.velaclaw（POSIX 消息队列，非 WebSocket）',
+        state: st.ready === true ? '已连接' : (st.ready === false ? '不可用（本地指令模式）' : '未探测'),
+        color: st.ready === true ? '#3DDC84' : (st.ready === false ? '#FBBF24' : '#94A3B8')
+      },
+      {
+        name: '边缘层 · M1（Ubuntu）',
+        what: '语音采集与播报、触控看板、四车下发通道',
+        how: 'WebSocket 28789（Agent 侧）／本地 HTTP（看板侧）',
+        state: '独立运行（本版不依赖）',
+        color: '#4DA3FF'
+      },
+      {
+        name: '车端 · ROS 2 小车',
+        what: '路线执行、本地感知与安全（遇障停车）',
+        how: 'ROS 2 topic；本版**未连接**，用地图动画演示',
+        state: '待对接',
+        color: '#FBBF24'
+      }
+    ]
+
+    return {
+      clock: ctx.clock,
+      toast: toastText,
+      links: links,
+      mapName: CFG.MAP.name,
+      mapSrc: 'classroom.pgm（350×197 格）',
+      resolution: CFG.MAP.resolution + ' m/格',
+      origin: '[' + CFG.MAP.origin.join(', ') + ']',
+      bounds: 'x ' + CFG.MAP.bounds.x.join(' ~ ') + '   y ' + CFG.MAP.bounds.y.join(' ~ '),
+      cars: snap.cars.map(function (c) {
+        return {
+          id: c.id,
+          name: c.name,
+          ip: c.ip,
+          online: c.online ? '#3DDC84' : '#FBBF24',
+          battery: c.battery,
+          mode: c.mode,
+          statusText: c.online ? '在线' : '离线'
+        }
+      }),
+      limits: CFG.LIMITS,
+      agentText: st.text,
+      agentHint: st.hint,
+      round: snap.round
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}}</span>
+      </div>
+      <div class="sb-right"><div class="btn btn-sm btn-ghost" data-act="back">返回</div></div>
+    </div>
+
+    <div class="section-title">跑在哪</div>
+    <div class="card">
+      <div class="kv"><span class="kv-k">运行平台</span><span class="kv-v">openvela Vela Emulator</span></div>
+      <div class="kv"><span class="kv-k">板级配置</span><span class="kv-v mono">goldfish-arm64-v8a-ap</span></div>
+      <div class="kv"><span class="kv-k">应用形态</span><span class="kv-v">Vela 快应用（QuickJS + LVGL + Yoga）</span></div>
+      <div class="kv"><span class="kv-k">屏幕</span><span class="kv-v">720 × 1280 竖屏</span></div>
+      <div class="kv"><span class="kv-k">本轮</span><span class="kv-v">第 {{round}} 轮</span></div>
+    </div>
+
+    <div class="section-title">三条链路各是谁</div>
+    {{each:links}}
+    <div class="card" style="padding:12px 16px">
+      <div class="row-between">
+        <span class="lrow-title">{{$item.name}}</span>
+        <span style="color:{{$item.color}};font-size:19px;font-weight:700">{{$item.state}}</span>
+      </div>
+      <div class="lrow-sub" style="margin-top:6px">{{$item.what}}</div>
+      <div class="lrow-sub" style="margin-top:2px">{{$item.how}}</div>
+    </div>
+    {{/each}}
+
+    <div class="section-title">端侧 AI 通道</div>
+    <div class="card">
+      <div class="kv"><span class="kv-k">状态</span><span class="kv-v">{{agentText}}</span></div>
+      <div class="lrow-sub" style="margin-top:6px">{{agentHint}}</div>
+      <div class="lrow-sub" style="margin-top:6px">
+        快应用与端侧 Agent 之间**没有 WebSocket**：官方给的是 @system.velaclaw.ask()，
+        走 POSIX 消息队列。所以语音页不做 WS 客户端，直接调 ask()。
+      </div>
+    </div>
+
+    <div class="section-title">地图基准</div>
+    <div class="card">
+      <div class="kv"><span class="kv-k">底图</span><span class="kv-v">{{mapSrc}}</span></div>
+      <div class="kv"><span class="kv-k">分辨率</span><span class="kv-v">{{resolution}}</span></div>
+      <div class="kv"><span class="kv-k">原点</span><span class="kv-v mono">{{origin}}</span></div>
+      <div class="kv"><span class="kv-k">可行区域</span><span class="kv-v mono">{{bounds}}</span></div>
+      <div class="lrow-sub" style="margin-top:6px">
+        来自车端当前生效的 ROS 地图，由 tools/ros-map-to-vector.js 自动转成矢量轮廓。
+      </div>
+    </div>
+
+    <div class="section-title">阈值与限值</div>
+    <div class="card">
+      <div class="kv"><span class="kv-k">单步距离上限</span><span class="kv-v">{{limits.step_distance_max_m}} m</span></div>
+      <div class="kv"><span class="kv-k">失联判定</span><span class="kv-v">{{limits.receipt_timeout_s}} s 无回执</span></div>
+      <div class="kv"><span class="kv-k">单任务时限</span><span class="kv-v">{{limits.task_deadline_s}} s</span></div>
+      <div class="kv"><span class="kv-k">低电量不派单</span><span class="kv-v">{{limits.battery_min}} %</span></div>
+      <div class="kv"><span class="kv-k">演示推进速度</span><span class="kv-v">{{limits.demo_speed_mps}} m/s（真车 0.12 m/s）</span></div>
+    </div>
+
+    <div class="section-title">车辆</div>
+    {{each:cars}}
+    <div class="lrow">
+      <div class="lrow-main">
+        <div class="row">
+          <div class="dot" style="background:{{$item.online}}"></div>
+          <span class="lrow-title">{{$item.name}}</span>
+          <span class="small muted" style="margin-left:10px">{{$item.ip}}</span>
+        </div>
+        <div class="lrow-sub">电量 {{$item.battery}}% · 通道 {{$item.mode}}</div>
+      </div>
+      <span style="color:{{$item.online}};font-size:19px">{{$item.statusText}}</span>
+    </div>
+    {{/each}}
+
+    <div class="lrow-sub">
+      诚实声明：模拟器没有摄像头、激光雷达、麦克风、GPIO。本版所有"感知"均由演示数据代替，
+      不声称模拟器具备任何物理外设能力；与真车对接需要车端的路线执行节点与回执通道。
+    </div>
+
+    <div class="dock">
+      <div class="btn" data-act="go" data-tid="Home">返回桌面</div>
+      <div class="btn" data-act="go" data-tid="Voice">语音助手</div>
+    </div>
+  </div>
+  {{if:toast}}<div class="toast">{{toast}}</div>{{/if}}
+  `
+
+  const act = {
+    back: function (ctx) { ctx.go('Home'); return false },
+    go: function (ctx, tid) { ctx.go(tid); return false }
+  }
+
+  function onLeave() {
+    toastText = ''
+  }
+
+  module.exports.default = { title: title, tpl: tpl, data: data, act: act, onLeave: onLeave }
+
+    });
+
+    __def("Voice", function (__req, __imp, module, exports) {
+  /**
+   * 页面：语音助手（Voice）
+   *
+   * 模拟器**没有麦克风**，所以这一页做成**文本对话**——比假装有语音更诚实，
+   * 而且 Skill 与工具调用的能力一样能演示到。
+   *
+   * 两条作答路径（自动选，界面上标出来）：
+   *   1. 端侧 Agent：`@system.velaclaw.ask()` → openvela 上的 ai_agent →
+   *      按 Skill（inspection.md）理解并调用它自己的工具。
+   *      返回里还带 `tool_calls`，所以界面能显示「它调了哪个工具」。
+   *   2. 本地指令表：Agent 不可用（没编译进固件／没配 LLM／浏览器预览）时兜底，
+   *      巡检控制类问句直接查 store，离线也能答，演示不会卡住。
+   */
+  const store = __imp(__mod("store"));
+  const agent = __imp(__mod("agent"));
+  let input = ''
+  let lastCount = -1
+
+  const title = '语音助手'
+
+  function data(ctx) {
+    const msgs = agent.messages()
+    const st = agent.status()
+    const pendingNow = agent.isPending()
+
+    /* 有新消息时给一个"自动滚到底"的标记，宿主据此把聊天区滚到底 */
+    if (msgs.length !== lastCount) {
+      lastCount = msgs.length
+      ctx.scrollChat = true
+    }
+
+    return {
+      clock: ctx.clock,
+      toast: '',
+      msgs: msgs.map(function (m) {
+        return {
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          toolText: m.toolText,
+          sourceText: m.source === 'agent'
+            ? '端侧 Agent'
+            : (m.source === 'local' ? '本地指令' : ''),
+          isMe: m.role === 'me'
+        }
+      }),
+      input: input,
+      pending: pendingNow,
+      presets: agent.presets(),
+      statusText: st.text,
+      statusHint: st.hint,
+      /* 颜色在 data() 里算好，别把 {{if}} 写进用引号包的 CSS 属性里——
+         那样模板解析会错位（写错过一次）。 */
+      statusColor: st.ready === true ? '#3ddc84' : '#fbbf24',
+      ready: st.ready === true,
+      notReady: st.ready === false
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}}</span>
+      </div>
+      <div class="sb-right"><div class="btn btn-sm btn-ghost" data-act="back">返回</div></div>
+    </div>
+
+    <div class="card" style="padding:10px 16px">
+      <div class="row-between">
+        <span class="small" style="color:{{statusColor}}">{{statusText}}</span>
+        <div class="btn btn-sm btn-ghost" data-act="clear">清空</div>
+      </div>
+      <div class="lrow-sub" style="margin-top:4px">{{statusHint}}</div>
+    </div>
+
+    <div class="chat" id="chatbox" data-chat="1">
+      {{if:msgs.length}}
+      {{each:msgs}}
+      <div class="msg {{if1:$item.isMe}}msg-me{{/if1}}">
+        <div class="bubble {{if1:$item.isMe}}bubble-me{{else}}bubble-agent{{/if1}}">
+          <span>{{$item.text}}</span>
+          {{if1:$item.toolText}}<div class="tools">🔧 {{$item.toolText}}</div>{{/if1}}
+          {{if1:$item.sourceText}}<div class="tools" style="color:#7d8ea8">来源：{{$item.sourceText}}</div>{{/if1}}
+        </div>
+      </div>
+      {{/each}}
+      {{else}}
+      <div class="empty">
+        说点什么吧。点下面的预设问句可以直接演示六条能力，<br>
+        也可以输入「开始巡检」「现在哪些区域没查完」「生成本轮巡检汇总」。
+      </div>
+      {{/if}}
+      {{if:pending}}<div class="msg"><div class="bubble bubble-sys">正在等端侧 Agent 回复…</div></div>{{/if}}
+    </div>
+
+    <div class="inputbar">
+      <input class="input" id="chatinput" data-input="1" placeholder="输入指令或问题…" value="{{input}}">
+      <div class="btn btn-primary" data-act="send" style="margin-left:12px;margin-right:0">发送</div>
+    </div>
+
+    <div class="presets">
+      {{each:presets}}
+      <div class="preset" data-act="ask" data-tid="{{$item.q}}">{{$item.label}}</div>
+      {{/each}}
+    </div>
+
+    <div class="lrow-sub">
+      唤醒词链路（Hello, openvela）在边缘层 M1 上，模拟器无麦克风，
+      因此这一版用文本入口代替；两者最终都走同一套 Skill 与工具。
+    </div>
+  </div>
+  `
+
+  const act = {
+    back: function (ctx) { ctx.go('Home'); return false },
+    clear: function () {
+      agent.reset()
+      input = ''
+      lastCount = -1
+      return true
+    },
+    send: function (ctx) {
+      const text = input
+      input = ''
+      submit(ctx, text)
+      return true
+    },
+    ask: function (ctx, tid) {
+      submit(ctx, tid)
+      return true
+    }
+  }
+
+  /** 发送一句并等回复；回复到达后重绘 */
+  function submit(ctx, text) {
+    const q = String(text || '').trim()
+    if (!q) {
+      return
+    }
+    /* 先把"我的话"画上去，再等回复——避免看起来像没反应 */
+    agent.ask(q).then(function () {
+      ctx.render()
+    })
+    ctx.render()
+  }
+
+  /** 宿主在每次重绘后调用：接住输入框的实时输入，并把聊天区滚到底 */
+  function afterRender(doc) {
+    if (!doc || !doc.getElementById) {
+      return
+    }
+    const el = doc.getElementById('chatinput')
+    if (el && !el.__bound) {
+      el.__bound = true
+      el.addEventListener('input', function () {
+        input = el.value
+      })
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          const text = input
+          input = ''
+          el.value = ''
+          agent.ask(text).then(function () {
+            if (boundRender) {
+              boundRender()
+            }
+          })
+          if (boundRender) {
+            boundRender()
+          }
+        }
+      })
+    }
+    const box = doc.getElementById('chatbox')
+    if (box) {
+      box.scrollTop = box.scrollHeight
+    }
+  }
+
+  /**
+   * 宿主注入的"请求重绘"函数。
+   * 输入框的回车处理发生在宿主的事件循环之外，需要它把重绘接回去。
+   */
+  let boundRender = null
+
+  function setRender(fn) {
+    boundRender = fn
+  }
+
+  function onLeave() {
+    /* 不清理历史：回到这一页还能看到刚才的对话 */
+  }
+
+  module.exports.default = {
+    title: title,
+    tpl: tpl,
+    data: data,
+    act: act,
+    afterRender: afterRender,
+    onLeave: onLeave
+  }
+
+    });
+
+    __def("Zones", function (__req, __imp, module, exports) {
+  /**
+   * 页面：区域与任务（Zones）
+   *
+   * 功能一「巡检区域与任务清单管理」的界面落点：
+   * 把端侧预设表**摊开给人看**——每个区域、它绑定的固定路线、
+   * 路线由哪些航点组成、每个航点在地图上的坐标、默认由哪台车执行。
+   *
+   * 这一页故意做成"只读 + 可派单"，改路线请改 src/common/data.js，
+   * 改完跑 `node tools/gen-waypoints.js --check` 校验。
+   */
+  const store = __imp(__mod("store"));
+  const CFG = __imp(__mod("data"));
+  let toastText = ''
+
+  const title = '区域与任务'
+
+  function data(ctx) {
+    const snap = store.snapshot()
+    const zones = CFG.ZONES.map(function (z) {
+      const pts = CFG.routePoints(z.route)
+      const st = snap.zones.filter(function (x) { return x.id === z.id })[0] || {}
+      return {
+        id: z.id,
+        name: z.name,
+        route: z.route,
+        routeName: CFG.ROUTES[z.route].name,
+        routeDesc: CFG.ROUTES[z.route].desc,
+        car: z.car,
+        statusText: st.statusText || '待执行',
+        color: st.color || '#94A3B8',
+        length: CFG.routeLength(z.route).toFixed(2),
+        stops: pts.map(function (p) {
+          return {
+            id: p.id,
+            name: p.name,
+            x: p.x.toFixed(2),
+            y: p.y.toFixed(2),
+            dwell: p.dwell > 0 ? (p.dwell + ' s') : '过'
+          }
+        })
+      }
+    })
+
+    return {
+      clock: ctx.clock,
+      toast: toastText,
+      zones: zones,
+      totalLen: CFG.allRouteLength().toFixed(2),
+      limits: CFG.LIMITS
+    }
+  }
+
+  const tpl = `
+  <div class="screen">
+    <div class="statusbar">
+      <div class="sb-left">
+        <span class="sb-time">{{clock}}</span>
+        <span class="sb-title">{{title}}</span>
+      </div>
+      <div class="sb-right"><div class="btn btn-sm btn-ghost" data-act="back">返回</div></div>
+    </div>
+
+    <div class="card">
+      <div class="lrow-title">端侧预设表（不依赖云端与数据库）</div>
+      <div class="lrow-sub" style="margin-top:6px">
+        四个区域 → 四条固定路线 → 四台车。整条巡检路线 {{totalLen}} m，
+        单步上限 {{limits.step_distance_max_m}} m，单任务时限 {{limits.task_deadline_s}} s，
+        失联判定 {{limits.receipt_timeout_s}} s。
+      </div>
+    </div>
+
+    {{each:zones}}
+    <div class="card">
+      <div class="row-between">
+        <div class="row">
+          <div class="dot" style="background:{{$item.color}}"></div>
+          <span class="lrow-title">{{$item.name}}</span>
+          <span class="small muted" style="margin-left:10px">{{$item.car}} · {{$item.length}} m</span>
+        </div>
+        <span style="color:{{$item.color}};font-size:20px;font-weight:700">{{$item.statusText}}</span>
+      </div>
+      <div class="lrow-sub" style="margin-top:6px">{{$item.routeName}} · {{$item.routeDesc}}</div>
+      <div class="row" style="margin-top:8px">
+        <div class="btn btn-sm btn-primary" data-act="dispatch" data-tid="{{$item.id}}">派单</div>
+        <div class="btn btn-sm" data-act="go" data-tid="Map">在地图上看</div>
+      </div>
+      <div style="margin-top:10px">
+        {{each1:$item.stops}}
+        <div class="kv">
+          <span class="kv-k mono">{{$item.id}} · {{$item.name}}</span>
+          <span class="kv-v mono">({{$item.x}}, {{$item.y}})  停留 {{$item.dwell}}</span>
+        </div>
+        {{/each1}}
+      </div>
+    </div>
+    {{/each}}
+
+    <div class="lrow-sub">
+      路线是一串「航点编号 + 停留时间」的白名单，任务单里只带路线编号、不带参数，
+      所以车端无法被诱导执行任意动作。改路线请改 src/common/data.js。
+    </div>
+
+    <div class="dock">
+      <div class="btn btn-primary" data-act="startRound">开始本轮巡检</div>
+      <div class="btn" data-act="go" data-tid="Map">看地图</div>
+    </div>
+  </div>
+  {{if:toast}}<div class="toast">{{toast}}</div>{{/if}}
+  `
+
+  const act = {
+    back: function (ctx) { ctx.go('Home'); return false },
+    go: function (ctx, tid) { ctx.go(tid); return false },
+    dispatch: function (ctx, tid) {
+      toastText = store.dispatch(tid).message
+      return true
+    },
+    startRound: function () {
+      toastText = store.startRound().message
+      return true
+    }
+  }
+
+  function onLeave() {
+    toastText = ''
+  }
+
+  module.exports.default = { title: title, tpl: tpl, data: data, act: act, onLeave: onLeave }
+
+    });
+
+    __def("app-shell", function (__req, __imp, module, exports) {
+  /**
+   * 宿主无关的应用外壳（浏览器预览 与 openvela 快应用**共用这一份**）
+   *
+   * 它负责：
+   *   · 定时 tick：每 250 ms 推进 store 的时钟与路线动画，并重绘
+   *   · 路由：切页 / 返回，并同步浏览器 hash（openvela 上没有 hash，自动跳过）
+   *   · 事件代理：把 [data-act] 的点击派发到对应页面的 act 表
+   *   · 时钟、提示浮层、重绘后钩子（输入框焦点、聊天区滚动）
+   *   · 把页面的 `import x from '../common/y.js'` 通过**注入的模块表**解析
+   *
+   * 为什么页面源码要用 import + 本文件在运行时解析：
+   *   openvela 的快应用**不认 import 语句**（QuickJS + 快应用框架的模块机制有限），
+   *   而浏览器不认全局变量式的模块。用 `__mod(name)` 解析后，两边都只依赖
+   *   「一个查表函数」这一件事，页面源码因此可以完全不动。
+   *
+   * @param {object} env
+   *   env.mod(name)       → 模块对象（'store' / 'data' / ...）
+   *   env.pages           → { Home: {tpl,data,act,...}, ... }
+   *   env.baseCss         → 公共样式串
+   *   env.doc             → document（或快应用上的等价物）
+   *   env.now()           → 当前时间戳（毫秒）
+   *   env.clockText(ts)   → 时间文案
+   *   env.setInterval / clearInterval
+   *   env.onPageRendered(pageName, doc)  → 每次重绘后回调（可选）
+   */
+  function createApp(env) {
+    const mod = env.mod
+    const router = mod('router')
+    const store = mod('store')
+    const data = mod('data')
+    const ui = mod('ui')
+
+    const doc = env.doc
+    let timer = null
+    let curPage = 'Home'
+    let scrollChat = false
+    let lastTick = env.now()
+
+    /** 当前页面的模块 */
+    function pageMod(name) {
+      return env.pages[name]
+    }
+
+    /** 组装模板上下文 */
+    function buildCtx() {
+      return {
+        clock: env.clockText(env.now()),
+        allRouteLength: data.allRouteLength(),
+        /* 供页面调用：跳页 */
+        go: function (page) {
+          navigate(page)
+        },
+        /* 供页面调用：请求重绘（异步流程结束后用） */
+        render: function () {
+          renderPage()
+        }
+      }
+    }
+
+    /**
+     * 派发一个动作（宿主的事件绑定层最终都会调到这里）。
+     * actName 来自元素的 data-act，tid 来自 data-tid。
+     */
+    function dispatch(actName, tid) {
+      const p = pageMod(curPage)
+      if (!p || !p.act || !p.act[actName]) {
+        return false
+      }
+      const ctx = buildCtx()
+      const need = p.act[actName](ctx, tid)
+      if (need) {
+        renderPage()
+      }
+      return true
+    }
+
+    /** 渲染当前页面 */
+    function renderPage() {
+      const p = pageMod(curPage) || pageMod('Home')
+      const tpl = mod('tpl')
+      const ctx = buildCtx()
+      ctx.scrollChat = scrollChat
+      const view = p.data ? p.data(ctx) : {}
+      /* 把 ctx 里的辅助函数并进视图数据，模板里可以直接用 */
+      view.go = ctx.go
+      view.render = ctx.render
+      view.title = p.title || ''
+
+      let html = tpl.render(p.tpl, view)
+      /*
+       * 交给宿主的绑定层处理交互。
+       * 浏览器侧挂事件代理；openvela 侧把 data-act 改写成 onclick 字符串
+       * （快应用没有 DOM 事件代理，只能在字符串阶段就把处理器写进节点）。
+       */
+      if (env.bindActions) {
+        html = env.bindActions(html, p)
+      }
+      env.setContent(html)
+
+      /* 重绘后钩子：输入框、滚动位置等 DOM 相关的事交给宿主/页面自己处理 */
+      if (env.afterRender) {
+        env.afterRender(curPage, p)
+      }
+      if (p.afterRender) {
+        p.afterRender(env.doc)
+      }
+      if (env.onPageRendered) {
+        env.onPageRendered(curPage, env.doc)
+      }
+      scrollChat = false
+    }
+
+    /** 统一的重绘入口（合并同一帧内的多次请求） */
+    let pendingRender = false
+    function requestRender() {
+      if (pendingRender) {
+        return
+      }
+      pendingRender = true
+      env.setTimeout(function () {
+        pendingRender = false
+        renderPage()
+      }, 0)
+    }
+
+    /** 切页 */
+    function navigate(page) {
+      if (pageMod(page)) {
+        curPage = page
+      } else {
+        return
+      }
+      if (env.setHash) {
+        env.setHash(page)
+      }
+      const p = pageMod(curPage)
+      /* 离开页面时给旧页面一次清理机会 */
+      renderPage()
+    }
+
+    /** 时钟与动画推进 */
+    function tick() {
+      const now = env.now()
+      const dt = Math.max(0, Math.min(1, (now - lastTick) / 1000))
+      lastTick = now
+      const events = store.tick(dt)
+      const p = pageMod(curPage)
+      /* 有事件时弹提示（主动告警的界面落点） */
+      if (events && events.length) {
+        ui.toast(events[0].text, 3200)
+      }
+      /* 只在地图/桌面/调度台这几页重绘，避免无谓开销 */
+      if (curPage === 'Map' || curPage === 'Home' || curPage === 'Dispatch' || events.length) {
+        renderPage()
+      }
+    }
+
+    return {
+      start: function (initial) {
+        curPage = pageMod(initial) ? initial : 'Home'
+        renderPage()
+        if (timer) {
+          env.clearInterval(timer)
+        }
+        timer = env.setInterval(tick, 250)
+        return curPage
+      },
+      stop: function () {
+        if (timer) {
+          env.clearInterval(timer)
+          timer = null
+        }
+      },
+      render: renderPage,
+      navigate: navigate,
+      dispatch: dispatch,
+      current: function () { return curPage },
+      requestRender: requestRender
+    }
+  }
+
+  module.exports.default = { createApp: createApp }
+
+    });
+
+    var __shell = __imp(__mod("app-shell"));
+
+    var __pages = {
+        "Dispatch": __imp(__mod("Dispatch")),
+        "Home": __imp(__mod("Home")),
+        "Map": __imp(__mod("Map")),
+        "Records": __imp(__mod("Records")),
+        "System": __imp(__mod("System")),
+        "Voice": __imp(__mod("Voice")),
+        "Zones": __imp(__mod("Zones"))
+    };
+
+    /* ---------- openvela：端侧 Agent 通道 ----------
+     * @system.velaclaw 只能出现在快应用的脚本里，所以写在这一层。
+     * 通道事实（取自竞赛分支源码，不是文档转述）：
+     *   IDL: promise<AskResponse> ask(AskParam)
+     *        AskResponse = { reply, extra_info, tool_calls: [{name, result}] }
+     *   传输: POSIX 消息队列 /velaclaw_qapp_in、/velaclaw_qapp_out
+     *   快应用侧**没有** @system.websocket，也没有让 Agent 调任意工具的通道。
+     */
+    var __velaclaw = null;
+    try {
+      __velaclaw = __req('@system.velaclaw');
+      __velaclaw = __imp(__velaclaw);
+    } catch (e) {
+      __velaclaw = null;
+    }
+    function __askAgent(query) {
+      return new Promise(function (resolve, reject) {
+        if (!__velaclaw || typeof __velaclaw.ask !== "function") {
+          reject(new Error('@system.velaclaw 不可用（固件未开 CONFIG_FEATURE_SYSTEM_VELACLAW）'));
+          return;
+        }
+        var timer = setTimeout(function () {
+          reject(new Error('端侧 Agent 超时未回复'));
+        }, 60000);
+        try {
+          __velaclaw.ask({
+            query: String(query),
+            success: function (res) {
+              clearTimeout(timer);
+              resolve(res || {});
+            },
+            fail: function (msg, code) {
+              clearTimeout(timer);
+              reject(new Error('端侧 Agent 返回失败：' + (msg || '') + ' code=' + (code || '')));
+            },
+            complete: function () { clearTimeout(timer); }
+          });
+        } catch (e2) {
+          clearTimeout(timer);
+          reject(e2);
+        }
+      });
+    }
+
+    /* ---------- 对外句柄 ---------- */
+    /* 一律走 __imp 解包，否则外部拿到的是命名空间而不是模块本身 */
+    global.VelaGuard = {
+      mod: function (name) { return __imp(__mod(name)); },
+      raw: __mod,
+      pages: __pages,
+      createApp: __shell.createApp,
+      askAgent: __askAgent,
+      data: __imp(__mod("data")),
+      store: __imp(__mod("store")),
+      agent: __imp(__mod("agent")),
+      ui: __imp(__mod("ui")),
+      router: __imp(__mod("router")),
+      tpl: __imp(__mod("tpl")),
+      map: __imp(__mod("map")),
+      baseCss: __imp(__mod("styles")).BASE_CSS
+    };
+  })(typeof globalThis !== "undefined" ? globalThis : this);
+
+  return globalThis.VelaGuard
+})()
+
+export default {
+  data: {
+    content: ''
+  },
+
+  onInit() {
+    this.boot()
+  },
+
+  boot() {
+    const self = this
+    try {
+      /* ---------- 打包产物句柄 ---------- */
+      if (!VelaGuard) {
+        this.content = '<div class="screen"><div class="empty">打包产物未加载（VelaGuard 句柄为空）</div></div>'
+        return
+      }
+      /*
+       * 与浏览器宿主的差异只有两处：
+       *   · 没有 DOM：setContent 只是把 HTML 交给 data.content
+       *   · 没有事件代理：bindActions 把 data-act 改写成 onclick 字符串
+       * 页面与 app-shell.js 两边完全共用同一份源码。
+       */
+      const env = {
+        mod: function (name) { return VelaGuard.mod(name) },
+        pages: VelaGuard.pages,
+        doc: null,
+        now: function () { return Date.now() },
+        clockText: function (ts) {
+          const d = new Date(ts)
+          const p = function (n) { return n < 10 ? '0' + n : '' + n }
+          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+            ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+        },
+        setContent: function (html) {
+          self.content = html
+        },
+        bindActions: function (html) {
+          /*
+           * 把 <div data-act="x" data-tid="y"> 变成
+           * <div onclick="dispatch('x','y')">。
+           * 少了这一步，openvela 上所有按钮都不会有反应。
+           */
+          return String(html)
+            .replace(/data-act="([A-Za-z0-9_]+)"(\s+data-tid="([^"]*)")?/g,
+              function (m, act, _x, tid) {
+                return 'onclick="dispatch(\'' + act + '\',\'' +
+                  String(tid || '').replace(/'/g, '') + '\')"'
+              })
+        },
+        setHash: null,
+        setTimeout: function (fn, ms) { return setTimeout(fn, ms) },
+        setInterval: function (fn, ms) { return setInterval(fn, ms) },
+        clearInterval: function (id) { clearInterval(id) },
+        afterRender: function () {
+          /* openvela 侧没有输入框焦点/滚动位置这些 DOM 状态需要恢复 */
+        }
+      }
+
+      /* ---------- 端侧 Agent 通道 ---------- */
+      /*
+       * @system.velaclaw 是本板唯一官方通道：
+       *   IDL: promise<AskResponse> ask(AskParam)
+       *        AskResponse = { reply, extra_info, tool_calls: [{name, result}] }
+       *   传输: POSIX 消息队列（/velaclaw_qapp_in、/velaclaw_qapp_out）
+       *   注意: 快应用侧**没有** @system.websocket；也不能让 Agent 去调任意工具。
+       * 用回调式 + 超时兜底，避免 Agent 无响应时界面一直等。
+       */
+      VelaGuard.agent.setAskSender(function (q) {
+        return new Promise(function (resolve, reject) {
+          let done = false
+          const timer = setTimeout(function () {
+            if (!done) {
+              done = true
+              reject(new Error('端侧 Agent 超时未回复（60 秒）'))
+            }
+          }, 60000)
+          try {
+            velaclaw.ask({
+              query: String(q),
+              success: function (res) {
+                done = true
+                clearTimeout(timer)
+                resolve(res || {})
+              },
+              fail: function (msg, code) {
+                done = true
+                clearTimeout(timer)
+                reject(new Error('velaclaw 返回失败：' + (msg || '') + ' code=' + (code || '')))
+              },
+              complete: function () {
+                clearTimeout(timer)
+              }
+            })
+          } catch (e) {
+            done = true
+            clearTimeout(timer)
+            reject(e)
+          }
+        })
+      })
+
+      /* ---------- 启动 ---------- */
+      this.app = VelaGuard.createApp(env)
+      this.app.start('Home')
+
+      /* 供 onclick 字符串调用：把动作派发回外壳 */
+      const shell = this.app
+      globalThis.dispatch = function (act, tid) {
+        shell.dispatch(act, tid)
+      }
+    } catch (e) {
+      this.content = '<div class="screen"><div class="empty">启动失败：' +
+        (e && e.message ? e.message : String(e)) + '</div></div>'
+    }
+  }
+}

@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>VelaGuard 巡检桌面 · 浏览器预览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /*
+   * 触屏观感对齐手机：禁用浏览器默认的文本交互。
+   *   user-select: none        长按拖拽不再选中文字、不出现蓝色高亮
+   *   -webkit-touch-callout    长按不弹系统式菜单
+   *   tap-highlight-color      点按不闪灰色高亮块
+   *   -webkit-user-drag        禁止拖拽元素
+   *   overscroll-behavior      禁止下拉刷新 / 橡皮筋回弹
+   *   touch-action: manipulation 去掉双击缩放带来的 300ms 延迟
+   * 界面里的文字都是展示性内容（标签、数值、状态），不需要被选中复制。
+   */
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-drag: none;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    /*
+     * cursor: none —— 隐藏浏览器层的光标。
+     *
+     * 为什么 X 层隐藏了还要在这里再隐藏一次：
+     * 触控屏上用户仍能看到指针，说明除了 X 的系统光标之外，
+     * 浏览器还可能在页面内自绘光标（Firefox 在触屏/kiosk 场景下会这么做）。
+     * XDefineCursor 只能管到 X 的光标，管不到浏览器自绘的那个。
+     * 所以两层都要设。
+     */
+    cursor: none !important;
+  }
+  html, body {
+    height: 100%;
+    background: #05080f;
+    color: #94a3b8;
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  #bar {
+    height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 18px;
+    background: #0b1220;
+    border-bottom: 1px solid #16223a;
+    font-size: 13px;
+  }
+  #bar b { color: #e2e8f0; font-size: 14px; }
+  #bar .sep { color: #334155; }
+  #bar .spacer { flex: 1; }
+  #bar button {
+    background: #16223a; color: #cbd5e1; border: 1px solid #23324f;
+    border-radius: 6px; padding: 5px 12px; font-size: 12px;
+    font-family: inherit;
+  }
+  #bar button:hover { background: #1d2a44; }
+  #bar button.on { background: #2f6df6; color: #fff; border-color: #2f6df6; }
+  /* 看板模式：隐藏工具栏，界面独占整屏 */
+  body.kiosk #bar { display: none; }
+  body.kiosk #stage { top: 0; }
+  #stage {
+    position: absolute; top: 46px; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #frame {
+    position: relative;
+    overflow: hidden;
+    background: #0b1220;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    transform-origin: center center;
+  }
+  /*
+   * #root 是「设备屏幕」的根：让它本身也是列方向弹性容器，
+   * 页面根节点才能拿到确定的 1280x800，height:100% 也才有正确的参照。
+   */
+  #root {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    left: 0;
+    top: 0;
+    /* 弹性子项的 min-height 默认是 auto，会让内容撑破 800 高的屏幕框，
+       导致 height:100% 解析成 896。清零后页面根节点才严格等于设备屏幕尺寸。 */
+    min-height: 0;
+    transform-origin: top left;
+  }
+  #toast {
+    position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%);
+    background: #2f6df6; color: #fff; padding: 12px 26px; border-radius: 20px;
+    font-size: 16px; opacity: 0; transition: opacity .2s; pointer-events: none;
+    z-index: 99; max-width: 80%;
+  }
+  #toast.show { opacity: 1; }
+  .pv-icon { display: inline-block; background-size: 100% 100%; }
+  .pv-glyph { display: block; }
+  /*
+   * Vela 控件的盒模型对齐（关键）：
+   *   - Vela 的 <text> 是行内盒，没有宽高；
+   *   - Vela 的 <div> 默认就是「列方向弹性容器」，也就是 display:flex + column，
+   *     所以 .ux 里写 flex-direction: row 才会生效。普通 HTML 的 div 只是静态块，
+   *     若不补齐这一层，所有横向排版都会退化成纵向堆叠。
+   *   - <scroll> 是可滚动容器。
+   * 只有对齐这几点，同一份 .ux 在浏览器与真机上的排版才一致。
+   */
+  span { display: inline; }
+  img { display: block; }
+  div, scroll { display: flex; flex-direction: column; }
+  scroll { overflow: hidden; }
+  .pv-hidden { display: none !important; }
+  .pv-logo { background-image: url(data:image/png;base64,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); }
+  .pv-icon-voice { background-image: url(data:image/png;base64,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); }
+  .pv-icon-dispatch { background-image: url(data:image/png;base64,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); }
+  .pv-icon-zones { background-image: url(data:image/png;base64,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); }
+  .pv-icon-records { background-image: url(data:image/png;base64,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); }
+  .pv-icon-system { background-image: url(data:image/png;base64,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); }
+</style>
+</head>
+<body>
+<div id="bar">
+  <b>VelaGuard 巡检桌面 · 浏览器预览</b>
+  <span class="sep">|</span>
+  <span>同一份 .ux 源码渲染，尺寸 1:1（设计基准宽 1280）</span>
+  <span class="spacer"></span>
+  <span id="pagelist"></span>
+  <button id="btn-fit" class="on">适应窗口</button>
+  <button id="btn-real">1:1</button>
+</div>
+<div id="stage">
+  <div id="frame">
+    <div id="root"></div>
+    <div id="toast"></div>
+    <pre id="errbox" style="display:none;position:absolute;left:8px;top:8px;right:8px;z-index:200;background:#3b0d0d;color:#ffb4b4;padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;max-height:60%;overflow:auto"></pre>
+  </div>
+</div>
+
+<script>
+  // 把模块初始化期的异常显示出来，避免白屏无从排查
+  window.__err = ''
+  function showErr(msg) {
+    window.__err = String(msg)
+    var d = document.getElementById('errbox')
+    if (d) { d.textContent = String(msg); d.style.display = 'block' }
+  }
+  window.addEventListener('error', function (e) {
+    showErr((e.message || 'error') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0))
+  })
+  window.addEventListener('unhandledrejection', function (e) {
+    showErr('rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason))
+  })
+</script>
+<script type="module">
+/* ---- 内联 src/common/store.js（断网可用，不发任何请求） ---- */
+/**
+ * VelaGuard 端侧数据源
+ *
+ * 首期为「端侧预设表」：区域 / 车辆 / 任务在此文件中维护，
+ * 不依赖云端与数据库，符合 openvela 端侧闭环的定位。
+ *
+ * 后续接入 C1 局域网时，只需把 dispatchTask / reportResult 换成
+ * 真实的任务单下发与状态回执处理，页面层无需改动。
+ *
+ * 说明：本文件同时被快应用（app.ux import）与浏览器预览页使用，
+ * 故不对顶层做任何宿主相关判断，只导出纯数据与方法。
+ */
+
+/* ------------------------------------------------------------------ *
+ * 1. 区域表：区域编号即责任划分，1 个区域对应 1 台编号巡检车
+ * ------------------------------------------------------------------ */
+const ZONES = [
+  {
+    id: 'Z1',
+    name: '入口大厅',
+    route: 'R-01',
+    routeDesc: '前台 → 闸机 → 电梯口',
+    car: 'CAR-1',
+    status: 'done',
+    statusText: '已完成',
+    progress: 100,
+    detail: '地面无杂物，闸机通行正常',
+    duration: '3 分 12 秒'
+  },
+  {
+    id: 'Z2',
+    name: '主通道',
+    route: 'R-02',
+    routeDesc: 'A 段 → B 段 → C 段',
+    car: 'CAR-2',
+    status: 'running',
+    statusText: '进行中',
+    progress: 62,
+    detail: '正在通过 B 段，暂无障碍',
+    duration: '1 分 48 秒'
+  },
+  {
+    id: 'Z3',
+    name: '展项区',
+    route: 'R-03',
+    routeDesc: '展台 1 → 展台 4 绕行',
+    car: 'CAR-3',
+    status: 'blocked',
+    statusText: '阻塞',
+    progress: 38,
+    detail: '展台 2 前有纸箱挡道，已停车待处置',
+    duration: '54 秒'
+  },
+  {
+    id: 'Z4',
+    name: '设备区',
+    route: 'R-04',
+    routeDesc: '配电柜 → 机柜背面',
+    car: 'CAR-4',
+    status: 'idle',
+    statusText: '未开始',
+    progress: 0,
+    detail: '等待派单',
+    duration: '—'
+  }
+]
+
+/* ------------------------------------------------------------------ *
+ * 2. 车辆表：每台车使用独立网段地址，避免重复接单
+ * ------------------------------------------------------------------ */
+const CARS = [
+  { id: 'CAR-1', zoneId: 'Z1', zone: '入口大厅', ip: '192.168.4.11', online: true, battery: 86, link: '良好' },
+  { id: 'CAR-2', zoneId: 'Z2', zone: '主通道', ip: '192.168.4.12', online: true, battery: 72, link: '良好' },
+  { id: 'CAR-3', zoneId: 'Z3', zone: '展项区', ip: '192.168.4.13', online: true, battery: 64, link: '良好' },
+  { id: 'CAR-4', zoneId: 'Z4', zone: '设备区', ip: '192.168.4.14', online: false, battery: 0, link: '离线' }
+]
+
+/* ------------------------------------------------------------------ *
+ * 3. 状态字典：任务状态机的 5 种态
+ * ------------------------------------------------------------------ */
+const STATUS = {
+  done: { text: '已完成', color: '#3DDC84', bg: 'rgba(61,220,132,0.16)' },
+  running: { text: '进行中', color: '#4DA3FF', bg: 'rgba(77,163,255,0.16)' },
+  blocked: { text: '阻塞', color: '#FF6B6B', bg: 'rgba(255,107,107,0.16)' },
+  idle: { text: '未开始', color: '#94A3B8', bg: 'rgba(148,163,184,0.16)' },
+  offline: { text: '离线', color: '#FBBF24', bg: 'rgba(251,191,36,0.16)' }
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. 巡检记录：按轮次留存，形成可追溯台账
+ * ------------------------------------------------------------------ */
+const RECORDS = [
+  {
+    round: '第 3 轮',
+    time: '今天 14:20',
+    zones: [
+      { name: '入口大厅', result: 'done' },
+      { name: '主通道', result: 'running' },
+      { name: '展项区', result: 'blocked' },
+      { name: '设备区', result: 'idle' }
+    ],
+    summary: '3 区已收回结果，1 区阻塞待重派'
+  },
+  {
+    round: '第 2 轮',
+    time: '今天 11:05',
+    zones: [
+      { name: '入口大厅', result: 'done' },
+      { name: '主通道', result: 'done' },
+      { name: '展项区', result: 'done' },
+      { name: '设备区', result: 'done' }
+    ],
+    summary: '四区全部完成，无异常'
+  },
+  {
+    round: '第 1 轮',
+    time: '昨天 16:40',
+    zones: [
+      { name: '入口大厅', result: 'done' },
+      { name: '主通道', result: 'done' },
+      { name: '展项区', result: 'offline' },
+      { name: '设备区', result: 'idle' }
+    ],
+    summary: '展项区车辆离线，任务未派出'
+  }
+]
+
+/* ------------------------------------------------------------------ *
+ * 5. 数据访问与汇总（功能四：巡检覆盖的基础汇总）
+ * ------------------------------------------------------------------ */
+function getZones() {
+  return ZONES.map(function (z) {
+    return Object.assign({}, z)
+  })
+}
+function getCars() {
+  return CARS.map(function (c) {
+    return Object.assign({}, c)
+  })
+}
+function getRecords() {
+  return RECORDS.map(function (r) {
+    return {
+      round: r.round,
+      time: r.time,
+      summary: r.summary,
+      zones: r.zones.map(function (z) {
+        return { name: z.name, result: z.result }
+      })
+    }
+  })
+}
+function statusOf(key) {
+  return STATUS[key] || STATUS.idle
+}
+
+/**
+ * 一轮巡检的覆盖汇总，供桌面概览卡片使用。
+ */
+function summarize() {
+  const counts = { done: 0, running: 0, blocked: 0, idle: 0, offline: 0 }
+  ZONES.forEach(function (z) {
+    const key = CARS.filter(function (c) {
+      return c.id === z.car
+    })[0]
+    if (key && !key.online) {
+      counts.offline += 1
+    } else {
+      counts[z.status] += 1
+    }
+  })
+  return {
+    total: ZONES.length,
+    counts: counts,
+    doneText: counts.done + ' / ' + ZONES.length,
+    needAction: counts.blocked + counts.offline
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. 派单与取消（功能二：任务派单与结果回收）
+ *
+ * 真实实现应在此处通过 C1 Wi-Fi 发送「任务单」报文：
+ *   任务序号 / 目标车辆 / 区域或路线编号 / 取消标记
+ * 并等待带同一任务序号的「状态回执」。
+ * 首期用内存状态代替，保证界面闭环可演示。
+ * ------------------------------------------------------------------ */
+let taskSeq = 1000
+function dispatchTask(zoneId) {
+  const zone = ZONES.filter(function (z) {
+    return z.id === zoneId
+  })[0]
+  if (!zone) {
+    return { ok: false, message: '区域不存在' }
+  }
+  const car = CARS.filter(function (c) {
+    return c.id === zone.car
+  })[0]
+  if (car && !car.online) {
+    return { ok: false, message: zone.car + ' 离线，请检查车辆或改为降级方案' }
+  }
+  taskSeq += 1
+  zone.status = 'running'
+  zone.statusText = '进行中'
+  zone.progress = 5
+  zone.detail = '任务单已下发，等待车端回执'
+  zone.duration = '刚刚'
+  return { ok: true, seq: taskSeq, message: '已向 ' + zone.car + ' 下发「' + zone.name + '」任务单' }
+}
+function cancelTask(zoneId) {
+  const zone = ZONES.filter(function (z) {
+    return z.id === zoneId
+  })[0]
+  if (!zone) {
+    return { ok: false, message: '区域不存在' }
+  }
+  zone.status = 'idle'
+  zone.statusText = '未开始'
+  zone.progress = 0
+  zone.detail = '任务已取消，等待重新派发'
+  zone.duration = '—'
+  return { ok: true, message: '已取消「' + zone.name + '」任务' }
+}
+
+/**
+ * 一键取消本轮全部未完成任务（对应 U1P 按键的「一键取消」入口）。
+ */
+function cancelAll() {
+  let n = 0
+  ZONES.forEach(function (z) {
+    if (z.status === 'running' || z.status === 'blocked') {
+      z.status = 'idle'
+      z.statusText = '未开始'
+      z.progress = 0
+      z.detail = '任务已取消，等待重新派发'
+      z.duration = '—'
+      n += 1
+    }
+  })
+  return { ok: true, message: n > 0 ? '已取消 ' + n + ' 个未完成任务' : '当前没有待取消的任务' }
+}
+
+/**
+ * 标记任务完成（供在线模拟与真实状态回执使用）。
+ * 真实接入时，这里就是「收到车端完成回执」的处理点。
+ */
+function markDone(zoneId, detail) {
+  const zone = ZONES.filter(function (z) {
+    return z.id === zoneId
+  })[0]
+  if (!zone) {
+    return { ok: false, message: '区域不存在' }
+  }
+  zone.status = 'done'
+  zone.statusText = '已完成'
+  zone.progress = 100
+  zone.detail = detail || '路线执行完毕，未发现异常'
+  return { ok: true, message: '「' + zone.name + '」已完成' }
+}
+
+/* ---- 数据源结束 ---- */
+
+/* ---- 内联 src/common/source.js（依赖上面的 store，顺序不能调） ---- */
+/**
+ * VelaGuard 数据源适配层
+ *
+ * 目的：把「界面」与「数据从哪来」彻底解耦。
+ *
+ * 界面只认一种东西——**状态快照（snapshot）**：
+ *
+ *   {
+ *     zones:     [...],   // 区域列表，字段见 store.js 的 ZONES
+ *     cars:      [...],   // 车辆列表
+ *     records:   [...],   // 历史轮次
+ *     summary:   {...},   // 汇总计数 { total, counts, doneText, needAction }
+ *     source:    'demo' | 'file' | 'sim',
+ *     sourceText:'演示数据' 等中文说明
+ *     connected: true/false,
+ *     lastUpdate: Date,
+ *     lastUpdateText: '刚刚' / 'HH:MM:SS'
+ *   }
+ *
+ * 三种实现（可通过 URL 参数或界面切换，见 control）：
+ *
+ *   1. demo —— 用 store.js 的端侧预设表演示，派单/取消直接改内存。
+ *              完全离线可用，是不接车也能演示的兜底模式。
+ *
+ *   2. file —— 轮询读取 data/state.json，作为真实数据的接入点。
+ *              把 M1 上的采集程序写到这个文件，界面就会跟着变。
+ *              （M1 是 Linux，最省事的落地方式）
+ *              另外还支持 data/command.json 下发指令（单向的文件桥）。
+ *
+ *   3. sim  —— 在线模拟：按脚本自动推进任务状态（派单→进行中→完成/阻塞），
+ *              用来验证「界面是否真的会跟着数据变」，不作为交付模式。
+ *
+ * 接真机时只需新增/替换一个 adapter；界面代码一行不用改。
+ */
+
+/* ================================================================== *
+ * 1. 演示数据源：包在 store 外面，接口与其它数据源一致
+ * ================================================================== */
+function createDemoAdapter() {
+  return {
+    name: 'demo',
+    sourceText: '演示数据',
+    available: true,
+    unavailableReason: '',
+    async start() {},
+    stop() {},
+
+    get() {
+      return {
+        zones: store.getZones(),
+        cars: store.getCars(),
+        records: store.getRecords(),
+        summary: store.summarize(),
+        source: 'demo',
+        sourceText: '演示数据',
+        connected: true,
+        lastUpdate: new Date(),
+        lastUpdateText: '本地'
+      }
+    },
+
+    dispatch(zoneId) {
+      return store.dispatchTask(zoneId)
+    },
+    cancel(zoneId) {
+      return store.cancelTask(zoneId)
+    },
+    cancelAll() {
+      return store.cancelAll()
+    }
+  }
+}
+
+/* ================================================================== *
+ * 2. 文件数据源：轮询 state.json 读取真实状态，通过 HTTP 接口下发指令
+ *
+ * 这是接 M1 真实数据的推荐入口：M1 侧只需要定期把巡检状态写成 JSON。
+ *
+ * 注意两点（都踩过）：
+ *   a) URL 用绝对路径 '/data/state.json'。
+ *      用相对路径 'data/state.json' 会以「当前页面」为基准解析成
+ *      /preview/data/state.json，直接 404。
+ *   b) 必须经 HTTP 提供，不能放在 file:// 下。
+ *      浏览器禁止 file:// 页面发起 fetch（跨源限制），
+ *      所以 file:// 打开时该数据源不可用，会自动回退到演示数据。
+ *      正式部署请用 `node tools/serve.js` 或 M1 上的本地 Web 服务。
+ * ================================================================== */
+function createFileAdapter(options) {
+  const opts = options || {}
+  const stateUrl = opts.stateUrl || '/data/state.json'
+  const commandUrl = opts.commandUrl || '/api/command'
+  /*
+   * 轮询间隔：**5 秒**（用户要求「每 5s 根据检测的参数更新一次页面数据」）。
+   * 设备侧由 linux/car_state.py 每 5 秒真去探测四台车（在线/电量）并写
+   * state.json，两边节奏对齐，页面上看到的永远是最近 5 秒内的实测值。
+   */
+  const period = opts.period || 5000
+
+  let timer = null
+  let last = null
+  let listener = null
+
+  /** file:// 下 fetch 会被浏览器拒绝，提前判定，避免无意义的报错刷屏 */
+  function usable() {
+    return String(location.protocol).indexOf('http') === 0
+  }
+
+  function unavailableReason() {
+    return 'file:// 下无法读取数据接口，请用 http 方式打开（node tools/serve.js）'
+  }
+
+  /** 把外部 JSON 规整成状态快照，缺字段时用演示数据兜底，避免界面崩掉 */
+  function normalize(raw) {
+    if (!raw || !raw.zones) {
+      return null
+    }
+    const zones = raw.zones.map(function (z) {
+      return {
+        id: z.id,
+        name: z.name,
+        route: z.route || '—',
+        routeDesc: z.routeDesc || '—',
+        car: z.car || '—',
+        status: z.status || 'idle',
+        statusText: z.statusText || store.statusOf(z.status || 'idle').text,
+        progress: typeof z.progress === 'number' ? z.progress : 0,
+        detail: z.detail || '',
+        duration: z.duration || '—'
+      }
+    })
+    const cars = (raw.cars || []).map(function (c) {
+      return {
+        id: c.id,
+        zoneId: c.zoneId || '',
+        zone: c.zone || '—',
+        ip: c.ip || '—',
+        online: !!c.online,
+        battery: typeof c.battery === 'number' ? c.battery : 0,
+        link: c.online ? '良好' : '离线'
+      }
+    })
+    const counts = { done: 0, running: 0, blocked: 0, idle: 0, offline: 0 }
+    zones.forEach(function (z) {
+      const offlineCar = cars.filter(function (c) {
+        return c.id === z.car && !c.online
+      })[0]
+      if (offlineCar) {
+        counts.offline += 1
+      } else if (counts[z.status] !== undefined) {
+        counts[z.status] += 1
+      }
+    })
+    return {
+      zones: zones,
+      cars: cars,
+      records: raw.records || store.getRecords(),
+      summary: {
+        total: zones.length,
+        counts: counts,
+        doneText: counts.done + ' / ' + zones.length,
+        needAction: counts.blocked + counts.offline
+      },
+      source: 'file',
+      sourceText: 'M1 数据',
+      connected: true,
+      lastUpdate: new Date(),
+      lastUpdateText: '刚刚'
+    }
+  }
+
+  async function poll() {
+    if (!usable()) {
+      if (last) {
+        last.connected = false
+        last.lastUpdateText = 'file:// 不可用'
+      }
+      return
+    }
+    try {
+      const res = await fetch(stateUrl + '?t=' + Date.now(), { cache: 'no-store' })
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status)
+      }
+      const snap = normalize(await res.json())
+      if (snap) {
+        last = snap
+        if (listener) {
+          listener(snap)
+        }
+      }
+    } catch (e) {
+      // 文件不存在或读不到：标记断连，但不抛错、不清空已有数据
+      if (last) {
+        last.connected = false
+        last.lastUpdateText = '连接断开'
+      }
+    }
+  }
+
+  return {
+    name: 'file',
+    sourceText: 'M1 数据',
+    start() {
+      poll()
+      timer = setInterval(poll, period)
+    },
+    stop() {
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    },
+    get() {
+      return last
+    },
+    /** 该数据源在当前环境下是否可用（供界面给出准确提示） */
+    get available() {
+      return usable()
+    },
+    get unavailableReason() {
+      return usable() ? '' : unavailableReason()
+    },
+    onUpdate(fn) {
+      listener = fn
+    },
+
+    /**
+     * 下发指令：写一个命令文件。
+     * 注意——单靠 file:// 页面无法写文件（浏览器沙箱限制），
+     * 正式使用时把 commandUrl 指向一个本地 HTTP 接口即可。
+     */
+    async dispatch(zoneId) {
+      return await sendCommand({ action: 'dispatch', zoneId: zoneId, at: Date.now() })
+    },
+    async cancel(zoneId) {
+      return await sendCommand({ action: 'cancel', zoneId: zoneId, at: Date.now() })
+    },
+    async cancelAll() {
+      return await sendCommand({ action: 'cancelAll', at: Date.now() })
+    }
+  }
+
+  async function sendCommand(payload) {
+    try {
+      const res = await fetch(commandUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status)
+      }
+      return { ok: true, message: '指令已下发' }
+    } catch (e) {
+      return {
+        ok: false,
+        message: '指令通道未接通（需要本地 HTTP 接口，file:// 下无法写文件）'
+      }
+    }
+  }
+}
+
+/* ================================================================== *
+ * 3. 在线模拟数据源：按脚本推进状态，验证「数据变→界面变」
+ * ================================================================== */
+function createSimAdapter(options) {
+  const opts = options || {}
+  const period = opts.period || 4000
+  let timer = null
+  let listener = null
+  let step = 0
+
+  /** 推进一步：让进行中的任务前进到完成，或把未开始的派出去 */
+  function tick() {
+    const zones = store.getZones()
+    let changed = false
+
+    zones.forEach(function (z) {
+      if (z.status === 'running') {
+        z.progress = Math.min(100, z.progress + 17)
+        changed = true
+        if (z.progress >= 100) {
+          store.markDone(z.id)
+        }
+      } else if (z.status === 'idle' && step % 3 === 0) {
+        store.dispatchTask(z.id)
+        changed = true
+      } else if (z.status === 'blocked' && step % 4 === 3) {
+        store.cancelTask(z.id)
+        changed = true
+      }
+    })
+
+    step += 1
+    // 注意：不能在回调里用 this，必须走闭包里的 self
+    if (changed && listener) {
+      listener(self.get())
+    }
+  }
+
+  const self = {
+    name: 'sim',
+    sourceText: '在线模拟',
+    available: true,
+    unavailableReason: '',
+    start() {
+      step = 0
+      timer = setInterval(tick, period)
+    },
+    stop() {
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    },
+    get() {
+      return {
+        zones: store.getZones(),
+        cars: store.getCars(),
+        records: store.getRecords(),
+        summary: store.summarize(),
+        source: 'sim',
+        sourceText: '在线模拟',
+        connected: true,
+        lastUpdate: new Date(),
+        lastUpdateText: '刚刚'
+      }
+    },
+    onUpdate(fn) {
+      listener = fn
+    },
+    dispatch(zoneId) {
+      return store.dispatchTask(zoneId)
+    },
+    cancel(zoneId) {
+      return store.cancelTask(zoneId)
+    },
+    cancelAll() {
+      return store.cancelAll()
+    }
+  }
+  return self
+}
+
+/* ================================================================== *
+ * 4. 统一入口：负责选择数据源、暴露订阅、并提供模式切换
+ * ================================================================== */
+function createSource(initialMode) {
+  const adapters = {
+    demo: createDemoAdapter(),
+    file: createFileAdapter({}),
+    sim: createSimAdapter({})
+  }
+
+  let current = null
+  let listener = null
+
+  function attach(name) {
+    if (current) {
+      // 必须先停掉旧适配器，否则它的轮询定时器会在后台一直跑，
+      // 频繁切源会不断累积定时器（隐性资源泄漏）。
+      if (current.stop) {
+        current.stop()
+      }
+      if (current.onUpdate) {
+        current.onUpdate(null)
+      }
+    }
+    current = adapters[name] || adapters.demo
+    if (current.onUpdate) {
+      current.onUpdate(function (snap) {
+        if (listener) {
+          listener(snap)
+        }
+      })
+    }
+    if (current.start) {
+      current.start()
+    }
+    return current
+  }
+
+  const source = {
+    get name() {
+      return current ? current.name : 'demo'
+    },
+
+    /** 当前状态快照，可能为 null（file 模式首次还没读到） */
+    get() {
+      return current ? current.get() : null
+    },
+
+    /** 订阅数据变化；返回取消订阅函数 */
+    onUpdate(fn) {
+      listener = fn
+      return function () {
+        listener = null
+      }
+    },
+
+    /** 切换数据源 */
+    setMode(name) {
+      attach(name)
+      if (listener) {
+        listener(source.get())
+      }
+      return source.name
+    },
+
+    /** 当前数据源在该环境下是否可用（file:// 下 file 源不可用） */
+    get available() {
+      return current ? current.available !== false : true
+    },
+    get unavailableReason() {
+      return current && current.unavailableReason ? current.unavailableReason : ''
+    },
+
+    /* --- 业务操作：委托给当前数据源，界面不需要知道用的是哪种 --- */
+    async dispatch(zoneId) {
+      return await current.dispatch(zoneId)
+    },
+    async cancel(zoneId) {
+      return await current.cancel(zoneId)
+    },
+    async cancelAll() {
+      return await current.cancelAll()
+    }
+  }
+
+  attach(initialMode || 'demo')
+  return source
+}
+
+/* ---- 适配层结束 ---- */
+
+/**
+ * 数据源实例（唯一数据入口）。
+ * 模式优先级：URL 参数 ?src= > 无网络时的默认 demo。
+ * 页面只通过它读写数据，不知道背后是演示、文件还是真实链路。
+ */
+const DEFAULT_SRC = (function () {
+  const m = String(location.search || '').match(/[?&]src=(demo|file|sim)/)
+  return m ? m[1] : 'demo'
+})()
+
+const source = createSource(DEFAULT_SRC)
+
+/* 兼容：部分页面还按 store 风格调用，这里给一个等价视图 */
+const store = {
+  getZones: getZones,
+  getCars: getCars,
+  getRecords: getRecords,
+  statusOf: statusOf,
+  summarize: summarize,
+  dispatchTask: dispatchTask,
+  cancelTask: cancelTask,
+  cancelAll: cancelAll,
+  markDone: markDone
+}
+
+const PAGES = {"Home":{"name":"Home","path":"/","html":"<div class=\"screen\">\n    <!-- ============ 状态栏：时间 / 通信 / 电源 ============ -->\n    <div class=\"statusbar\">\n      <div class=\"sb-left\">\n        <span class=\"sb-time\"><b data-bind=\"now\"></b></span>\n        <span class=\"sb-label\">VelaGuard 巡检桌面</span>\n      </div>\n      <div class=\"sb-right\">\n        <div class=\"chip\" data-style=\"srcStyle\" data-act=\"toggleSource\">\n          <span class=\"chip-text\" data-style=\"srcTextStyle\"><b data-bind=\"srcText\"></b></span>\n        </div>\n        <div class=\"chip chip-warn\">\n          <span class=\"chip-text-warn\"><b data-bind=\"onlineText\"></b></span>\n        </div>\n        <span class=\"sb-battery\">电池 <b data-bind=\"battery\"></b>%</span>\n      </div>\n    </div>\n\n    <!-- ============ 概览区：本轮巡检的一句话结论 ============ -->\n    <div class=\"hero\">\n      <div class=\"hero-head\">\n        <span class=\"hero-title\">本轮巡检 · 第 3 轮</span>\n        <span class=\"hero-src\"><b data-bind=\"srcDetail\"></b></span>\n      </div>\n      <span class=\"hero-main\"><b data-bind=\"summaryLine\"></b></span>\n      <div class=\"hero-stats\">\n        <div class=\"stat\">\n          <span class=\"stat-num num-done\"><b data-bind=\"counts.done\"></b></span>\n          <span class=\"stat-label\">已完成</span>\n        </div>\n        <div class=\"stat\">\n          <span class=\"stat-num num-run\"><b data-bind=\"counts.running\"></b></span>\n          <span class=\"stat-label\">进行中</span>\n        </div>\n        <div class=\"stat\">\n          <span class=\"stat-num num-block\"><b data-bind=\"counts.blocked\"></b></span>\n          <span class=\"stat-label\">阻塞</span>\n        </div>\n        <div class=\"stat\">\n          <span class=\"stat-num num-idle\"><b data-bind=\"counts.idle\"></b></span>\n          <span class=\"stat-label\">未开始</span>\n        </div>\n        <div class=\"stat\">\n          <span class=\"stat-num num-off\"><b data-bind=\"counts.offline\"></b></span>\n          <span class=\"stat-label\">离线</span>\n        </div>\n      </div>\n    </div>\n\n    <!-- ============ 应用区：像手机桌面一样排列的程序入口 ============ -->\n    <span class=\"section-title\">全部应用</span>\n    <div class=\"grid\">\n      <div class=\"tile\" data-each=\"tiles\" data-tid=\"$item.uri\" data-act=\"openApp\">\n        <div class=\"tile-icon-wrap\" data-style=\"$item.wrapStyle\">\n          <span class=\"tile-glyph\"><b data-bind=\"$item.glyph\"></b></span>\n        </div>\n        <span class=\"tile-name\"><b data-bind=\"$item.name\"></b></span>\n        <span class=\"tile-sub\"><b data-bind=\"$item.sub\"></b></span>\n      </div>\n    </div>\n\n    <!-- ============ 区域状态条：宽屏下补足纵向空间并提升信息量 ============ -->\n    <span class=\"section-title\">区域状态</span>\n    <div class=\"zstrip\">\n      <div class=\"zchip\" data-each=\"zoneChips\">\n        <div class=\"zdot\" data-style=\"$item.dotStyle\"></div>\n        <span class=\"zname\"><b data-bind=\"$item.name\"></b></span>\n        <span class=\"zstate\" data-style=\"$item.textStyle\"><b data-bind=\"$item.statusText\"></b></span>\n      </div>\n    </div>\n\n    <!-- ============ 底部快捷坞 ============ -->\n    <div class=\"dock\">\n      <div class=\"dock-btn dock-primary\" data-act=\"quickStart\">\n        <span class=\"dock-text-primary\">开始本轮巡检</span>\n      </div>\n      <div class=\"dock-btn\" data-act=\"quickCancel\">\n        <span class=\"dock-text\">一键取消</span>\n      </div>\n      <div class=\"dock-btn\" data-act=\"openApp\" data-tid=\"/voice\">\n        <span class=\"dock-text\">语音助手</span>\n      </div>\n      <span class=\"dock-hint\">异常已通过 U1P 声光提示</span>\n    </div>\n\n    <!-- ============ 提示浮层 ============ -->\n    <div class=\"toast\" data-if=\"toast\">\n      <span class=\"toast-text\"><b data-bind=\"toast\"></b></span>\n    </div>\n  </div>","css":"[data-page=\"Home\"] .screen {\n\n    flex-direction: column;\n    width: 100%;\n    height: 100%;\n    padding: 18px 22px 18px 22px;\n    background-color: #0b1220;\n  }\n[data-page=\"Home\"] .statusbar {\n\n    flex-direction: row;\n    justify-content: space-between;\n    align-items: center;\n    height: 56px;\n    margin-bottom: 14px;\n  }\n[data-page=\"Home\"] .sb-left {\n\n    flex-direction: row;\n    align-items: center;\n  }\n[data-page=\"Home\"] .sb-time {\n\n    font-size: 40px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"Home\"] .sb-label {\n\n    font-size: 27px;\n    color: #64748b;\n    margin-left: 20px;\n  }\n[data-page=\"Home\"] .sb-right {\n\n    flex-direction: row;\n    align-items: center;\n  }\n[data-page=\"Home\"] .sb-battery {\n\n    font-size: 27px;\n    color: #94a3b8;\n    margin-left: 18px;\n  }\n[data-page=\"Home\"] .chip {\n\n    justify-content: center;\n    align-items: center;\n    \n    min-height: 60px;\n    padding: 8px 22px 8px 22px;\n    border-radius: 26px;\n    margin-left: 16px;\n  }\n[data-page=\"Home\"] .chip-warn {\n\n    background-color: rgba(251, 191, 36, 0.16);\n  }\n[data-page=\"Home\"] .chip-text-warn {\n\n    font-size: 25px;\n    color: #fbbf24;\n  }\n[data-page=\"Home\"] .chip-text {\n\n    font-size: 25px;\n    color: #a9c1e0;\n  }\n[data-page=\"Home\"] .hero {\n\n    flex-direction: column;\n    width: 100%;\n    padding: 16px 32px 14px 32px;\n    border-radius: 30px;\n    background-color: #16223a;\n  }\n[data-page=\"Home\"] .hero-title {\n\n    font-size: 27px;\n    color: #7d8ea8;\n  }\n[data-page=\"Home\"] .hero-head {\n\n    flex-direction: row;\n    justify-content: space-between;\n    align-items: center;\n  }\n[data-page=\"Home\"] .hero-src {\n\n    font-size: 24px;\n    color: #64748b;\n  }\n[data-page=\"Home\"] .hero-main {\n\n    font-size: 40px;\n    font-weight: bold;\n    color: #e2e8f0;\n    margin-top: 8px;\n  }\n[data-page=\"Home\"] .hero-stats {\n\n    flex-direction: row;\n    margin-top: 10px;\n  }\n[data-page=\"Home\"] .stat {\n\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    width: 220px;\n    padding: 4px 0px 4px 0px;\n  }\n[data-page=\"Home\"] .stat-num {\n\n    font-size: 42px;\n    font-weight: bold;\n  }\n[data-page=\"Home\"] .num-done {\n\n    color: #3ddc84;\n  }\n[data-page=\"Home\"] .num-run {\n\n    color: #4da3ff;\n  }\n[data-page=\"Home\"] .num-block {\n\n    color: #ff6b6b;\n  }\n[data-page=\"Home\"] .num-idle {\n\n    color: #94a3b8;\n  }\n[data-page=\"Home\"] .num-off {\n\n    color: #fbbf24;\n  }\n[data-page=\"Home\"] .stat-label {\n\n    font-size: 25px;\n    color: #7d8ea8;\n    margin-top: 4px;\n  }\n[data-page=\"Home\"] .section-title {\n\n    font-size: 28px;\n    color: #7d8ea8;\n    margin-top: 12px;\n    margin-bottom: 10px;\n  }\n[data-page=\"Home\"] .grid {\n\n    flex: 1;\n    flex-direction: row;\n    flex-wrap: wrap;\n    width: 100%;\n  }\n[data-page=\"Home\"] .tile {\n\n    flex-direction: column;\n    align-items: center;\n    justify-content: center;\n    width: 600px;\n    height: 138px;\n    padding: 6px 14px 6px 14px;\n    margin: 0px 24px 12px 0px;\n    border-radius: 26px;\n    background-color: #16223a;\n  }\n[data-page=\"Home\"] .tile-icon-wrap {\n\n    width: 70px;\n    height: 70px;\n    border-radius: 20px;\n    justify-content: center;\n    align-items: center;\n  }\n[data-page=\"Home\"] .tile-glyph {\n\n    font-size: 36px;\n    color: #ffffff;\n  }\n[data-page=\"Home\"] .tile-name {\n\n    font-size: 26px;\n    font-weight: bold;\n    color: #e2e8f0;\n    margin-top: 6px;\n  }\n[data-page=\"Home\"] .tile-sub {\n\n    font-size: 21px;\n    color: #7d8ea8;\n    margin-top: 2px;\n  }\n[data-page=\"Home\"] .zstrip {\n\n    flex-direction: row;\n    flex-wrap: wrap;\n    width: 100%;\n    margin-bottom: 2px;\n  }\n[data-page=\"Home\"] .zchip {\n\n    flex-direction: row;\n    align-items: center;\n    height: 46px;\n    padding: 0px 18px 0px 16px;\n    margin: 0px 14px 6px 0px;\n    border-radius: 23px;\n    background-color: #16223a;\n  }\n[data-page=\"Home\"] .zdot {\n\n    width: 14px;\n    height: 14px;\n    border-radius: 7px;\n    margin-right: 10px;\n  }\n[data-page=\"Home\"] .zname {\n\n    font-size: 24px;\n    color: #cbd5e1;\n    margin-right: 10px;\n  }\n[data-page=\"Home\"] .zstate {\n\n    font-size: 23px;\n    font-weight: bold;\n  }\n[data-page=\"Home\"] .dock {\n\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    height: 68px;\n    margin-top: 0px;\n    padding: 0px 0px 0px 0px;\n    background-color: transparent;\n  }\n[data-page=\"Home\"] .dock-btn {\n\n    justify-content: center;\n    align-items: center;\n    height: 60px;\n    padding: 0px 26px 0px 26px;\n    margin-right: 16px;\n    border-radius: 26px;\n    background-color: #23324f;\n  }\n[data-page=\"Home\"] .dock-primary {\n\n    background-color: #2f6df6;\n  }\n[data-page=\"Home\"] .dock-text {\n\n    font-size: 26px;\n    color: #cbd5e1;\n  }\n[data-page=\"Home\"] .dock-text-primary {\n\n    font-size: 26px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"Home\"] .dock-hint {\n\n    flex: 1;\n    font-size: 22px;\n    color: #64748b;\n    text-align: right;\n  }\n[data-page=\"Home\"] .toast {\n\n    position: absolute;\n    left: 360px;\n    bottom: 150px;\n    padding: 20px 36px 20px 36px;\n    border-radius: 24px;\n    background-color: #2f6df6;\n  }\n[data-page=\"Home\"] .toast-text {\n\n    font-size: 28px;\n    color: #ffffff;\n  }","script":"\n\n\n\n  return {\n    private: {\n      // 初始占位符，startClock() 会立刻用真实时间覆盖（不要写死一个时间，\n      // 那样在时钟还没跑起来的一瞬间会看到假的\"14:26\"）\n      now: '— —',\n      battery: 86,\n      onlineText: '3 / 4 车在线',\n      summaryLine: '—',\n      srcText: '演示数据',\n      srcStyle: 'background-color: rgba(148, 163, 184, 0.16)',\n      srcTextStyle: 'color: #94a3b8',\n      srcDetail: '数据来自端侧预设表，未接真实链路',\n      counts: { done: 0, running: 0, blocked: 0, idle: 0, offline: 0 },\n      zoneChips: [],\n      toast: '',\n      // 应用注册表：新增一个 app 只需在这里加一条，磁贴会自动出现\n      appRegistry: [\n        { name: '巡检调度台', sub: '派单与状态', glyph: '巡', uri: '/dispatch', color: '#2F6DF6' },\n        { name: '语音助手', sub: '端侧 AI 对话', glyph: '语', uri: '/voice', color: '#0EA5A4' },\n        { name: '区域与路线', sub: '4 区 4 路线', glyph: '区', uri: '/zones', color: '#7C5CFF' },\n        { name: '巡检记录', sub: '按轮次回看', glyph: '记', uri: '/records', color: '#F59E0B' },\n        { name: '系统与网络', sub: 'Wi-Fi / 模型', glyph: '设', uri: '/system', color: '#64748B' }\n      ],\n      // 模板直接渲染的栅格数据（图标底色通过 style 绑定注入）\n      tiles: []\n    },\n\n    onInit() {\n      this.renderTiles()\n      this.refresh()\n      this.startClock()\n      // 订阅数据源：数据一变就重绘，真实链路接入后无需改这里\n      const self = this\n      source.onUpdate(function () {\n        self.refresh()\n      })\n    },\n\n\n\n\n\n\n\n\n\n\n\n    startClock() {\n      const pad = function (n) { return n < 10 ? '0' + n : '' + n }\n      const tick = () => {\n        const d = new Date()\n        this.now = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +\n          ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())\n      }\n      tick()\n      setInterval(tick, 1000)\n    },\n\n    onShow() {\n      this.refresh()\n    },\n\n    onRefresh() {\n      this.refresh()\n    },\n\n\n    refresh() {\n      const snap = source.get()\n      if (!snap) {\n        this.summaryLine = '正在连接数据源…'\n        return\n      }\n      const s = snap.summary\n      this.counts = s.counts\n\n      let online = 0\n      let battery = 0\n      snap.cars.forEach(function (c) {\n        if (c.online) {\n          online += 1\n          battery = battery > c.battery ? battery : c.battery\n        }\n      })\n      this.onlineText = online + ' / ' + snap.cars.length + ' 车在线'\n      this.battery = battery\n\n      // 区域状态条：一眼看清每个区域当前处于什么状态\n      this.zoneChips = snap.zones.map(function (z) {\n        const st = store.statusOf(z.status)\n        return {\n          name: z.name,\n          statusText: z.statusText,\n          dotStyle: 'background-color: ' + st.color,\n          textStyle: 'color: ' + st.color\n        }\n      })\n\n      // 数据源指示：让运维一眼看出当前是演示数据还是真实链路\n      this.srcText = snap.sourceText + (snap.connected ? '' : ' · 断连')\n      this.srcStyle = snap.connected\n        ? 'background-color: rgba(61, 220, 132, 0.16)'\n        : 'background-color: rgba(255, 107, 107, 0.16)'\n      this.srcTextStyle = snap.connected ? 'color: #3ddc84' : 'color: #ff6b6b'\n      this.srcDetail = '数据来源：' + snap.sourceText +\n        ' · 更新于 ' + snap.lastUpdateText\n\n      if (s.needAction > 0) {\n        this.summaryLine = s.total + ' 区中 ' + s.counts.done + ' 区已完成，' +\n          s.counts.blocked + ' 区阻塞待重派，' + s.counts.offline + ' 区车辆离线'\n      } else if (s.counts.running > 0) {\n        this.summaryLine = '巡检进行中，已收回 ' + s.counts.done + ' 区结果'\n      } else {\n        this.summaryLine = '四区全部完成，本轮无异常'\n      }\n    },\n\n\n\n\n\n\n\n\n    toggleSource() {\n      const order = ['demo', 'file', 'sim']\n      const origin = source.name\n      const self = this\n\n      for (let i = 1; i <= order.length - 1; i += 1) {\n        const cand = order[(order.indexOf(origin) + i) % order.length]\n        source.setMode(cand)\n\n        if (!source.available) {\n          continue\n        }\n        const snap = source.get()\n        if (snap) {\n          // 找到了可用且有数据的数据源\n          this.refresh()\n          prompt.showToast({ message: '数据源已切换为：' + this.srcText, duration: 2000 })\n          return\n        }\n        // 切过去了但还没读到数据：给 file 源一点时间再判一次\n        if (cand === 'file') {\n          prompt.showToast({ message: '正在连接 M1 数据接口…', duration: 1500 })\n          setTimeout(function () {\n            if (source.name !== 'file') {\n              return\n            }\n            if (source.get()) {\n              self.refresh()\n              prompt.showToast({ message: '已连接：' + self.srcText, duration: 2000 })\n            } else {\n              source.setMode(origin)\n              self.refresh()\n              prompt.showToast({\n                message: source.unavailableReason || '数据接口未接通，已回到演示数据',\n                duration: 3000\n              })\n            }\n          }, 2600)\n          return\n        }\n      }\n\n      // 全部不可用：回到原来的数据源\n      source.setMode(origin)\n      this.refresh()\n      prompt.showToast({ message: '仅演示数据可用：' + (source.unavailableReason || ''), duration: 3000 })\n    },\n\n\n    renderTiles() {\n      const tiles = this.appRegistry.map(function (a) {\n        return {\n          name: a.name,\n          sub: a.sub,\n          glyph: a.glyph,\n          uri: a.uri,\n          wrapStyle: 'background-color: ' + a.color\n        }\n      })\n      this.tiles = tiles\n    },\n\n    openApp(e) {\n      const uri = e && e.target && e.target.attr ? e.target.attr.tid : ''\n      if (!uri) {\n        return\n      }\n      router.push({ uri: uri })\n    },\n\n\n    quickStart() {\n      const self = this\n      const snap = source.get()\n      if (!snap) {\n        prompt.showToast({ message: '数据源未连接，无法派单', duration: 2000 })\n        return\n      }\n      const pending = snap.zones.filter(function (z) {\n        return z.status === 'idle' || z.status === 'blocked'\n      })\n      if (pending.length === 0) {\n        prompt.showToast({ message: '四个区域都已执行或已完成，无需派单', duration: 2500 })\n        return\n      }\n      Promise.all(pending.map(function (z) {\n        return Promise.resolve(source.dispatch(z.id))\n      })).then(function (rs) {\n        const ok = rs.filter(function (r) {\n          return r && r.ok\n        }).length\n        const fail = pending.length - ok\n        prompt.showToast({\n          message: '已派发 ' + ok + ' 个任务' + (fail > 0 ? '，' + fail + ' 个失败' : ''),\n          duration: 2500\n        })\n        self.refresh()\n      })\n    },\n\n    quickCancel() {\n      const self = this\n      Promise.resolve(source.cancelAll()).then(function (msg) {\n        prompt.showToast({ message: msg.message, duration: 2000 })\n        self.refresh()\n      })\n    }\n  }\n"},"VoiceAssistant":{"name":"VoiceAssistant","path":"/voice","html":"<div class=\"screen\">\n    <!-- ============ 标题栏 ============ -->\n    <div class=\"topbar\">\n      <div class=\"back\" data-act=\"goBack\">\n        <span class=\"back-text\">返回</span>\n      </div>\n      <span class=\"topbar-title\">语音助手</span>\n      <div class=\"chip\" data-style=\"aiChipStyle\">\n        <span class=\"chip-text\" data-style=\"aiChipTextStyle\"><b data-bind=\"aiStatusText\"></b></span>\n      </div>\n    </div>\n\n    <!-- ============ 会话气泡 ============\n         data-auto-bottom：新消息进来时自动滚到底部。\n         框架层在每次重建后按这个标记决定「继续贴底」还是「保留用户当前位置」，\n         所以往上翻历史时不会被强行拽回底部。\n         id 供页面脚本在追加消息后主动贴底（见 scrollChatToBottom）。 -->\n    <div id=\"chatList\" class=\"chat\" scroll-y=\"true\" data-auto-bottom=\"1\">\n      <div class=\"chat-inner\">\n        <div class=\"bubble-row\" data-each=\"messages\">\n          <div class=\"bubble\" data-style=\"$item.bubbleStyle\">\n            <span class=\"bubble-role\" data-style=\"$item.roleStyle\"><b data-bind=\"$item.role\"></b></span>\n            <span class=\"bubble-text\"><b data-bind=\"$item.text\"></b></span>\n          </div>\n        </div>\n        <div class=\"bubble-row\" data-if=\"thinking\">\n          <div class=\"bubble bubble-ai\">\n            <span class=\"bubble-role role-ai\">助手</span>\n            <span class=\"bubble-text\">正在思考…</span>\n          </div>\n        </div>\n      </div>\n    </div>\n\n    <!-- ============ 预设指令：固定指令识别入口 ============ -->\n    <span class=\"section-title\">常用指令</span>\n    <div class=\"chips\">\n      <div class=\"quick\" data-each=\"quickReplies\" data-tid=\"$item.text\" data-act=\"askQuick\">\n        <span class=\"quick-text\"><b data-bind=\"$item.text\"></b></span>\n      </div>\n    </div>\n\n    <!-- ============ 底部输入区 ============\n         data-touch：在 touchstart 时就触发（而不是等手指抬起合成 click）。\n         这是「按住说话」手感的关键 —— 触屏上 click 发生在抬指瞬间，\n         用户按下去看不到任何反应，会以为没按到。 -->\n    <div class=\"input-bar\">\n      <div class=\"mic\" data-style=\"micStyle\" data-act=\"onMic\" data-touch=\"onMic\">\n        <span class=\"mic-text\"><b data-bind=\"micText\"></b></span>\n      </div>\n      <div class=\"ask\" data-act=\"askCurrent\">\n        <span class=\"ask-text\">发送</span>\n      </div>\n      <span class=\"hint\"><b data-bind=\"hint\"></b></span>\n    </div>\n  </div>","css":"[data-page=\"VoiceAssistant\"] .screen {\n\n    flex-direction: column;\n    width: 100%;\n    height: 100%;\n    padding: 27px 33px 27px 33px;\n    background-color: #0b1220;\n  }\n[data-page=\"VoiceAssistant\"] .topbar {\n\n    flex-direction: row;\n    align-items: center;\n    height: 93px;\n    margin-bottom: 18px;\n  }\n[data-page=\"VoiceAssistant\"] .back {\n\n    justify-content: center;\n    align-items: center;\n    height: 72px;\n    padding: 0px 36px 0px 36px;\n    border-radius: 36px;\n    background-color: #16223a;\n  }\n[data-page=\"VoiceAssistant\"] .back-text {\n\n    font-size: 35px;\n    color: #cbd5e1;\n  }\n[data-page=\"VoiceAssistant\"] .topbar-title {\n\n    flex: 1;\n    font-size: 45px;\n    font-weight: bold;\n    color: #ffffff;\n    margin-left: 27px;\n  }\n[data-page=\"VoiceAssistant\"] .chip {\n\n    padding: 12px 27px 12px 27px;\n    border-radius: 30px;\n  }\n[data-page=\"VoiceAssistant\"] .chip-text {\n\n    font-size: 32px;\n  }\n[data-page=\"VoiceAssistant\"] .chat {\n\n    flex: 1;\n    \n    min-height: 0;\n    width: 100%;\n    border-radius: 33px;\n    background-color: #111c30;\n    \n    touch-action: pan-y;\n    \n    -webkit-overflow-scrolling: touch;\n    \n    overscroll-behavior: contain;\n  }\n[data-page=\"VoiceAssistant\"] .chat-inner {\n\n    flex-direction: column;\n    width: 100%;\n    padding: 27px;\n  }\n[data-page=\"VoiceAssistant\"] .bubble-row {\n\n    flex-direction: row;\n    width: 100%;\n    margin-bottom: 21px;\n  }\n[data-page=\"VoiceAssistant\"] .bubble {\n\n    flex-direction: column;\n    max-width: 1650px;\n    padding: 27px 39px 27px 39px;\n    border-radius: 33px;\n    \n    touch-action: pan-y;\n  }\n[data-page=\"VoiceAssistant\"] .bubble-ai {\n\n    background-color: #1d2a44;\n  }\n[data-page=\"VoiceAssistant\"] .bubble-role {\n\n    font-size: 29px;\n    margin-bottom: 9px;\n  }\n[data-page=\"VoiceAssistant\"] .role-ai {\n\n    color: #4da3ff;\n  }\n[data-page=\"VoiceAssistant\"] .bubble-text {\n\n    font-size: 38px;\n    color: #e2e8f0;\n  }\n[data-page=\"VoiceAssistant\"] .section-title {\n\n    font-size: 29px;\n    color: #7d8ea8;\n    margin-top: 12px;\n    margin-bottom: 8px;\n    \n    flex-shrink: 0;\n  }\n[data-page=\"VoiceAssistant\"] .chips {\n\n    flex-direction: row;\n    flex-wrap: wrap;\n    width: 100%;\n    flex-shrink: 0;\n  }\n[data-page=\"VoiceAssistant\"] .quick {\n\n    justify-content: center;\n    align-items: center;\n    height: 68px;\n    padding: 0px 28px 0px 28px;\n    margin: 0px 14px 12px 0px;\n    border-radius: 34px;\n    background-color: #1d2a44;\n  }\n[data-page=\"VoiceAssistant\"] .quick-text {\n\n    font-size: 30px;\n    color: #a9c1e0;\n  }\n[data-page=\"VoiceAssistant\"] .input-bar {\n\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    height: 96px;\n    margin-top: 6px;\n    flex-shrink: 0;\n  }\n[data-page=\"VoiceAssistant\"] .mic {\n\n    justify-content: center;\n    align-items: center;\n    width: 290px;\n    height: 84px;\n    border-radius: 42px;\n  }\n[data-page=\"VoiceAssistant\"] .mic-text {\n\n    font-size: 39px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"VoiceAssistant\"] .ask {\n\n    justify-content: center;\n    align-items: center;\n    width: 185px;\n    height: 84px;\n    margin-left: 18px;\n    border-radius: 42px;\n    background-color: #2f6df6;\n  }\n[data-page=\"VoiceAssistant\"] .ask-text {\n\n    font-size: 39px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"VoiceAssistant\"] .hint {\n\n    flex: 1;\n    font-size: 30px;\n    color: #64748b;\n    text-align: right;\n  }","script":"\n\n\n\n  const SPEECH_URL = 'http://127.0.0.1:8124'\n\n\n  function playBeep(kind) {\n    try {\n      fetch(SPEECH_URL + '/api/beep', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({ kind: kind || 'ready' })\n      }).catch(function () {})\n    } catch (e) {\n      // 忽略：没有语音服务时仍然可以走文本指令\n    }\n  }\n\n\n  function voiceState() {\n    return fetch(SPEECH_URL + '/api/voice/state')\n      .then(function (r) { return r.json() })\n      .catch(function () { return { ok: false, state: null } })\n  }\n\n\n\n\n\n\n\n\n\n\n\n  function voiceRecords(since) {\n    return fetch(SPEECH_URL + '/api/voice/records?since=' + (since || 0))\n      .then(function (r) { return r.json() })\n      .catch(function () { return { ok: false, records: [] } })\n  }\n\n\n\n\n\n\n  function voiceTalk() {\n    return fetch(SPEECH_URL + '/api/voice/talk', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ wait: 45 })\n    }).then(function (r) {\n      return r.json()\n    }).catch(function () {\n      return { ok: false, stage: 'no-service',\n               reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }\n    })\n  }\n\n\n\n\n\n\n\n\n  function voiceStart() {\n    return fetch(SPEECH_URL + '/api/voice/start', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({})\n    }).then(function (r) {\n      if (r.status === 404) {\n        // 桥是老版本：退回一次性接口，功能仍然可用（只是第二次按下不生效）\n        return voiceTalk()\n      }\n      return r.json()\n    }).catch(function () {\n      return { ok: false, stage: 'no-service',\n               reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }\n    })\n  }\n\n\n\n\n\n\n\n\n\n\n\n\n  function voiceStop() {\n    return fetch(SPEECH_URL + '/api/voice/stop', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ wait: 2 })\n    }).then(function (r) {\n      return r.json()\n    }).catch(function () {\n      return { ok: false, stage: 'no-service',\n               reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }\n    })\n  }\n\n\n  function recordSpeech(seconds) {\n    return fetch(SPEECH_URL + '/api/record', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ seconds: seconds || 4 })\n    }).then(function (r) {\n      return r.json()\n    }).catch(function () {\n      return { ok: false, silent: true, reason: '语音服务未启动（请运行 linux/speech-bridge.py）' }\n    })\n  }\n\n  return {\n    private: {\n      aiReady: false,\n      aiStatusText: '本地指令模式',\n      aiChipStyle: 'background-color: rgba(251, 191, 36, 0.16)',\n      aiChipTextStyle: 'color: #fbbf24',\n      thinking: false,\n      // 「正在听 / 正在识别」的模态：这期间按键不再接受新的按压\n      listening: false,\n      busy: false,\n      micText: '说话',\n      micStyle: 'background-color: #0EA5A4',\n      hint: '按一下「说话」开始，说完再按一下结束',\n      messages: [],\n      quickReplies: [\n        { text: '开始本轮巡检' },\n        { text: '现在哪些区域没查完' },\n        { text: '展项区为什么阻塞' },\n        { text: '取消全部未完成任务' },\n        { text: '生成巡检报告' }\n      ],\n      // 当前将要发出的问题（由预设指令选择或语音识别结果决定）\n      current: '',\n      // 语音服务能力：micOk=false 表示本机麦克风采不到声音（硬件层限制）\n      speechReady: false,\n      micOk: false,\n      speechNote: '',\n\n\n\n\n\n\n      chatPinned: true,\n      // 设备对话记录的轮询游标（已看到的最后一条序号）\n      lastSeq: 0,\n      // 已经渲染过的记录键，避免「阻塞返回」与「轮询」把同一条显示两遍\n      seenRecords: {},\n      // 轮询是否已停（页面销毁后不再拉）\n      pollStopped: false\n    },\n\n    onInit() {\n      this.messages = [\n        {\n          role: '助手',\n          text: '我是 VelaGuard 语音助手。按一下「说话」开始，说完再按一下「结束」；' +\n                '也可以直接喊「Hello, openvela」，或点下面的常用指令。',\n          bubbleStyle: 'background-color: #1d2a44',\n          roleStyle: 'color: #4da3ff'\n        }\n      ]\n      this.probeAI()\n      // 先把游标对到「当前最新」，避免一进页面就把历史对话全灌进来\n      this.primeRecords()\n    },\n\n    onShow() {\n      this.scrollChatToBottom()\n      this.watchChatScroll()\n      this.startPolling()\n    },\n\n    onHide() {\n      this.stopPolling()\n    },\n\n    onDestroy() {\n      this.stopPolling()\n    },\n\n\n    primeRecords() {\n      const self = this\n      voiceRecords(0).then(function (r) {\n        if (r && r.ok) {\n          self.lastSeq = r.lastSeq || 0\n        }\n      })\n    },\n\n\n\n\n\n\n\n\n\n\n\n\n\n    startPolling() {\n      const self = this\n      if (this._pollTimer) {\n        return\n      }\n      this.pollStopped = false\n      this._pollTimer = setInterval(function () {\n        if (self.pollStopped) {\n          return\n        }\n        voiceRecords(self.lastSeq).then(function (r) {\n          if (!r || !r.ok) {\n            return\n          }\n          const list = r.records || []\n          let added = 0\n          list.forEach(function (rec) {\n            if (rec.seq > self.lastSeq) {\n              self.lastSeq = rec.seq\n            }\n            if (self.renderRecord(rec)) {\n              added += 1\n            }\n          })\n          if (added > 0) {\n            // 有新对话就贴底（历史翻看状态由 scrollChatToBottom 自己判断）\n            self.scrollChatToBottom()\n          }\n        })\n      }, 1000)\n    },\n\n    stopPolling() {\n      this.pollStopped = true\n      if (this._pollTimer) {\n        clearInterval(this._pollTimer)\n        this._pollTimer = null\n      }\n    },\n\n\n\n\n\n\n\n    renderRecord(rec) {\n      if (!rec) {\n        return false\n      }\n      const key = rec.seq ? ('s' + rec.seq) : ((rec.ts || '') + '|' + (rec.text || ''))\n      if (this.seenRecords[key]) {\n        return false\n      }\n      this.seenRecords[key] = true\n\n      const text = String(rec.text || '').trim()\n      const reply = String(rec.said || '').trim() || this.describeRecord(rec)\n      if (!text && !reply) {\n        return false\n      }\n      if (text) {\n        this.pushMessage('你', text, false)\n      }\n      if (reply) {\n        this.pushMessage('助手', reply, true)\n      }\n      return true\n    },\n\n\n\n\n\n\n\n\n\n    describeRecord(rec) {\n      const errMap = {\n        net: '网络不通', asr: '识别失败', asr_to: '识别超时',\n        nohear: '没听清', nomatch: '没听懂', unsafe: '这条指令不安全',\n        noaction: '这条指令还没配置', execfail: '执行失败',\n        vcmderr: '命令解析出错', micbusy: '麦克风被占用',\n        recfail: '录音失败', nomic: '没听到声音', nocar: '小车联系不上'\n      }\n      if (rec.error && errMap[rec.error]) {\n        return errMap[rec.error]\n      }\n      const intentMap = {\n        forward: '前进', backward: '后退', turn_left: '左转', turn_right: '右转',\n        strafe_left: '向左平移', strafe_right: '向右平移', stop: '急停',\n        reset: '复位', start_formation: '编队实验', status: '查询状态',\n        car_check: '查询小车连接', battery: '查询电量', confirm: '已确认'\n      }\n      if (rec.intent && intentMap[rec.intent]) {\n        return '已执行：' + intentMap[rec.intent]\n      }\n      if (rec.error) {\n        return '出错了（' + rec.error + '）'\n      }\n      return ''\n    },\n\n\n\n\n\n    watchChatScroll() {\n      const self = this\n      if (this._chatWatched) {\n        return\n      }\n      const el = (function () {\n        try {\n          return document.getElementById('chatList')\n        } catch (e) {\n          return null\n        }\n      })()\n      if (!el || typeof el.addEventListener !== 'function') {\n        return\n      }\n      this._chatWatched = true\n      el.addEventListener('scroll', function () {\n        const gap = el.scrollHeight - el.scrollTop - el.clientHeight\n        self.chatPinned = gap < 40\n      })\n    },\n\n\n\n\n\n\n\n\n\n\n\n    probeAI() {\n      const self = this\n\n      // 先探本地离线语音服务（本设备上真正可用的那条）\n      fetch(SPEECH_URL + '/api/health').then(function (r) {\n        return r.json()\n      }).then(function (h) {\n        self.speechReady = !!(h && h.ok && h.model)\n        if (self.speechReady) {\n          self.speechNote = h.engine || 'vosk 离线'\n          self.hint = '按一下「说话」开始，说完再按一下「结束」'\n        }\n      }).catch(function () {\n        self.speechReady = false\n        self.hint = '本地指令可用，巡检数据来自 ' + self.sourceName()\n      })\n\n      // 再看端侧 AI（本设备一般不可用，拿到就升级）\n      let mod = null\n      try {\n        mod = velaclaw\n      } catch (e) {\n        mod = null\n      }\n      if (!mod || typeof mod.ask !== 'function') {\n        this.aiReady = false\n        this.aiStatusText = '本地指令模式'\n        return\n      }\n      try {\n        mod.ask({\n          query: 'ping',\n          success() {\n            self.aiReady = true\n            self.aiStatusText = '端侧 AI 已就绪'\n            self.aiChipStyle = 'background-color: rgba(61, 220, 132, 0.16)'\n            self.aiChipTextStyle = 'color: #3ddc84'\n            self.hint = '已连接端侧 AI'\n          },\n          fail(data, code) {\n            self.aiReady = false\n            self.aiStatusText = '本地指令模式'\n          }\n        })\n      } catch (err) {\n        this.aiReady = false\n        this.aiStatusText = '本地指令模式'\n      }\n    },\n\n    sourceName() {\n      const snap = source.get()\n      return snap ? snap.sourceText : '未连接'\n    },\n\n    askQuick(e) {\n      const text = e && e.target && e.target.attr ? e.target.attr.tid : ''\n      if (!text) {\n        return\n      }\n      this.current = text\n      this.ask(text)\n    },\n\n    askCurrent() {\n      if (!this.current) {\n        this.pushMessage('你', '请先点一条常用指令，或点「说话」', false)\n        return\n      }\n      this.ask(this.current)\n    },\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n    onMic() {\n      const self = this\n\n      // 已经在识别/播报中：忽略，避免用户连点把状态搞乱\n      if (this.busy) {\n        return\n      }\n\n      // ---------- 第二次按：立即结束录音 ----------\n      if (this.listening) {\n        this.listening = false\n        this.busy = true\n        this.micText = '识别中'\n        this.micStyle = 'background-color: #64748b'\n        this.hint = '正在识别…'\n        playBeep('stop')          // 下行音 = 结束\n        voiceStop().then(function (res) {\n          self.finishTalk(res)\n        })\n        return\n      }\n\n      // ---------- 第一次按：提示音 + 立即开始录音 ----------\n      this.busy = true\n      this.hint = '正在启动…'\n      playBeep('listen')          // 上行音 = 开始\n      voiceState().then(function (st) {\n        const s = st && st.state\n        if (!s || !s.assistant) {\n          return { ok: false, stage: 'no-service',\n                   reason: '设备语音服务未运行' }\n        }\n        return voiceStart()\n      }).then(function (res) {\n        if (!res || !res.ok) {\n          // 起不来就如实说，不要留在「正在听」的假状态里\n          self.busy = false\n          self.listening = false\n          self.micText = '说话'\n          self.micStyle = 'background-color: #0EA5A4'\n          self.hint = (res && res.reason) || '语音服务不可用'\n          self.pushMessage('助手',\n            '没能开始录音：' + ((res && res.reason) || '未知原因') +\n            '。可以先点下面的常用指令。', true)\n          return\n        }\n\n\n\n\n        if (res.stage === 'done') {\n          self.finishTalk(res)\n          return\n        }\n        self.busy = false\n        self.listening = true\n        self.micText = '结束'\n        self.micStyle = 'background-color: #F59E0B'\n        self.hint = '正在听…说完再按一下「结束」'\n      })\n    },\n\n\n    finishTalk(res) {\n      this.busy = false\n      this.listening = false\n      this.micText = '说话'\n      this.micStyle = 'background-color: #0EA5A4'\n\n      if (!res) {\n        this.hint = '没有拿到结果'\n        return\n      }\n\n\n\n\n\n\n      if (res.ok && res.stage === 'recognizing') {\n        this.hint = '录音已结束，正在识别…（云端较慢，结果会自动显示）'\n        return\n      }\n\n      if (!res.ok) {\n        this.hint = res.reason || '语音交互失败'\n        this.pushMessage('助手', '没成功：' + (res.reason || '未知原因'), true)\n        return\n      }\n\n      // 已经把结果带回来了：走和轮询同一条渲染路径（按 seq/ts 去重，不会重复显示）\n      const shown = this.renderRecord({\n        seq: res.seq,\n        ts: res.ts,\n        text: res.text,\n        said: res.said,\n        error: res.error,\n        intent: res.intent\n      })\n      if (shown) {\n        this.hint = res.stopMode === 'vad-auto' ? '完成（说完自动结束的）' : '完成'\n        return\n      }\n      if (res.text || res.said) {\n        this.hint = '完成'\n        return\n      }\n      this.hint = '设备没识别到内容，结果出来会自动显示'\n    },\n\n\n    ask(query) {\n      this.pushMessage('你', query, false)\n      const self = this\n      // 本地可闭环的指令优先本地执行，避免依赖大模型可用性\n      const local = this.tryLocal(query)\n      if (local) {\n        this.pushMessage('助手', local, true)\n        return\n      }\n      if (!this.aiReady) {\n\n\n\n\n        this.pushMessage('助手',\n          '这句我答不上来。当前可用的是「常用指令」里的巡检类问题，' +\n          '它们直接读本地巡检数据，不依赖大模型。', true)\n        return\n      }\n      this.thinking = true\n      velaclaw.ask({\n        query: query,\n        success(res) {\n          self.thinking = false\n          self.pushMessage('助手', res && res.reply ? res.reply : '（未返回内容）', true)\n        },\n        fail(data, code) {\n          self.thinking = false\n          self.pushMessage('助手', '调用端侧 AI 失败，错误码 ' + code, true)\n        }\n      })\n    },\n\n\n\n\n\n    tryLocal(query) {\n      const snap = source.get()\n      if (!snap) {\n        return '数据源未连接，请先确认 M1 侧是否在写 data/state.json。'\n      }\n      if (query.indexOf('开始') >= 0 && query.indexOf('巡检') >= 0) {\n        const idle = snap.zones.filter(function (z) {\n          return z.status === 'idle' || z.status === 'blocked'\n        })\n        if (idle.length === 0) {\n          return '当前没有待派发的区域，四个区域都已执行或已完成。'\n        }\n        let ok = 0\n        idle.forEach(function (z) {\n          const r = store.dispatchTask(z.id)\n          if (r.ok) {\n            ok += 1\n          }\n        })\n        return '已向 ' + ok + ' 个区域下发任务单：' + idle.map(function (z) {\n          return z.name\n        }).join('、') + '。'\n      }\n      if (query.indexOf('取消') >= 0) {\n        return store.cancelAll().message\n      }\n      if (query.indexOf('没查完') >= 0 || query.indexOf('进度') >= 0 || query.indexOf('哪些区域') >= 0) {\n        const pending = snap.zones.filter(function (z) {\n          return z.status !== 'done'\n        })\n        if (pending.length === 0) {\n          return '四个区域都已查完，本轮巡检无未完成项。'\n        }\n        return '尚未完成的区域有 ' + pending.length + ' 个：' + pending.map(function (z) {\n          return z.name + '（' + z.statusText + '）'\n        }).join('、') + '。需要现在重新派发吗？'\n      }\n      if (query.indexOf('阻塞') >= 0 || query.indexOf('为什么') >= 0) {\n        const blocked = snap.zones.filter(function (z) {\n          return z.status === 'blocked'\n        })\n        if (blocked.length === 0) {\n          return '当前没有阻塞区域。'\n        }\n        return blocked.map(function (z) {\n          return z.name + '：' + z.detail + '（车辆 ' + z.car + '，已完成 ' + z.progress + '%）'\n        }).join('；')\n      }\n      if (query.indexOf('数据') >= 0 || query.indexOf('来源') >= 0 || query.indexOf('连接') >= 0) {\n        return '当前数据源为「' + snap.sourceText + '」' +\n          (snap.connected ? '，链路正常。' : '，链路已断开。') +\n          '更新于 ' + snap.lastUpdateText + '。'\n      }\n      if (query.indexOf('报告') >= 0 || query.indexOf('汇总') >= 0) {\n        const s = snap.summary\n        return '本轮巡检共 ' + s.total + ' 个区域：已完成 ' + s.counts.done +\n          '、进行中 ' + s.counts.running + '、阻塞 ' + s.counts.blocked +\n          '、未开始 ' + s.counts.idle + '、离线 ' + s.counts.offline + '。'\n      }\n      return ''\n    },\n\n    pushMessage(role, text, isAI) {\n      const isUser = !isAI\n      const item = {\n        role: role,\n        text: text,\n        bubbleStyle: isUser\n          ? 'background-color: #2f6df6; align-self: flex-end'\n          : 'background-color: #1d2a44',\n        roleStyle: isUser ? 'color: #cfe0ff' : 'color: #4da3ff'\n      }\n      const list = this.messages.slice()\n      list.push(item)\n      this.messages = list\n      this.scrollChatToBottom()\n    },\n\n\n\n\n\n\n\n\n\n\n\n\n\n    scrollChatToBottom() {\n      const self = this\n      const run = function () {\n        let el = null\n        try {\n          el = document.getElementById('chatList')\n        } catch (e) {\n          el = null\n        }\n        if (!el) {\n          return\n        }\n        // 用户正在翻历史：不打扰\n        if (el.scrollHeight > el.clientHeight + 4) {\n          const gap = el.scrollHeight - el.scrollTop - el.clientHeight\n          if (gap > 40 && self.chatPinned === false) {\n            return\n          }\n          self.chatPinned = true\n        }\n        if (typeof el.scrollTo === 'function') {\n          try {\n            el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })\n          } catch (e) {\n            el.scrollTop = el.scrollHeight\n          }\n        } else {\n          el.scrollTop = el.scrollHeight\n        }\n      }\n      // 等这一帧渲染完成再滚，否则拿到的 scrollHeight 还是旧的\n      if (typeof requestAnimationFrame === 'function') {\n        requestAnimationFrame(run)\n      } else {\n        run()\n      }\n    },\n\n    goBack() {\n      router.back()\n    }\n  }\n"},"Dispatch":{"name":"Dispatch","path":"/dispatch","html":"<div class=\"screen\">\n    <!-- ============ 标题栏 ============ -->\n    <div class=\"topbar\">\n      <div class=\"back\" data-act=\"goBack\">\n        <span class=\"back-text\">返回</span>\n      </div>\n      <span class=\"topbar-title\">巡检调度台</span>\n      <div class=\"chip\">\n        <span class=\"chip-text\"><b data-bind=\"headline\"></b></span>\n      </div>\n    </div>\n\n    <div class=\"body\">\n      <!-- ============ 左：4 台车辆的状态卡 ============ -->\n      <div class=\"left\">\n        <span class=\"section-title\">车辆与区域</span>\n        <div class=\"cars\">\n          <div class=\"car\" data-each=\"cars\">\n            <div class=\"car-head\">\n              <span class=\"car-id\"><b data-bind=\"$item.id\"></b></span>\n              <div class=\"dot\" data-style=\"$item.dotStyle\"></div>\n              <span class=\"car-link\" data-style=\"$item.linkStyle\"><b data-bind=\"$item.link\"></b></span>\n            </div>\n            <span class=\"car-zone\"><b data-bind=\"$item.zone\"></b> · <b data-bind=\"$item.ip\"></b></span>\n            <span class=\"car-meta\">电量 <b data-bind=\"$item.batteryText\"></b></span>\n          </div>\n        </div>\n\n        <div class=\"note\">\n          <span class=\"note-title\">异常闭环提示</span>\n          <span class=\"note-text\"><b data-bind=\"alertText\"></b></span>\n        </div>\n      </div>\n\n      <!-- ============ 右：任务清单与操作 ============ -->\n      <div class=\"right\">\n        <span class=\"section-title\">本轮任务清单</span>\n        <div class=\"tasks\">\n          <div class=\"task\" data-each=\"zones\">\n            <div class=\"task-line\">\n              <span class=\"task-zone\"><b data-bind=\"$item.name\"></b></span>\n              <div class=\"badge\" data-style=\"$item.badgeStyle\">\n                <span class=\"badge-text\" data-style=\"$item.badgeTextStyle\"><b data-bind=\"$item.statusText\"></b></span>\n              </div>\n            </div>\n            <span class=\"task-detail\"><b data-bind=\"$item.detail\"></b></span>\n            <div class=\"task-foot\">\n              <span class=\"task-route\"><b data-bind=\"$item.route\"></b> · <b data-bind=\"$item.car\"></b></span>\n              <span class=\"task-progress\">进度 <b data-bind=\"$item.progress\"></b>%</span>\n            </div>\n            <div class=\"actions\">\n              <div class=\"btn btn-primary\" data-tid=\"$item.id\" data-act=\"onDispatch\">\n                <span class=\"btn-text-primary\">派单</span>\n              </div>\n              <div class=\"btn\" data-tid=\"$item.id\" data-act=\"onCancel\">\n                <span class=\"btn-text\">取消</span>\n              </div>\n            </div>\n          </div>\n        </div>\n      </div>\n    </div>\n\n    <!-- ============ 底部批量操作 ============ -->\n    <div class=\"footer\">\n      <div class=\"dock-btn dock-primary\" data-act=\"onStartAll\">\n        <span class=\"dock-text-primary\">开始本轮巡检</span>\n      </div>\n      <div class=\"dock-btn\" data-act=\"onCancelAll\">\n        <span class=\"dock-text\">一键取消全部</span>\n      </div>\n      <span class=\"footer-hint\">派单报文：任务序号 / 目标车辆 / 区域路线编号 / 取消标记</span>\n    </div>\n  </div>","css":"[data-page=\"Dispatch\"] .screen {\n\n    flex-direction: column;\n    width: 100%;\n    height: 100%;\n    padding: 18px 22px 18px 22px;\n    background-color: #0b1220;\n  }\n[data-page=\"Dispatch\"] .topbar {\n\n    flex-direction: row;\n    align-items: center;\n    height: 62px;\n    margin-bottom: 12px;\n  }\n[data-page=\"Dispatch\"] .back {\n\n    justify-content: center;\n    align-items: center;\n    height: 48px;\n    padding: 0px 24px 0px 24px;\n    border-radius: 24px;\n    background-color: #16223a;\n  }\n[data-page=\"Dispatch\"] .back-text {\n\n    font-size: 23px;\n    color: #cbd5e1;\n  }\n[data-page=\"Dispatch\"] .topbar-title {\n\n    flex: 1;\n    font-size: 30px;\n    font-weight: bold;\n    color: #ffffff;\n    margin-left: 18px;\n  }\n[data-page=\"Dispatch\"] .chip {\n\n    padding: 8px 18px 8px 18px;\n    border-radius: 20px;\n    background-color: #1d2a44;\n  }\n[data-page=\"Dispatch\"] .chip-text {\n\n    font-size: 21px;\n    color: #a9c1e0;\n  }\n[data-page=\"Dispatch\"] .body {\n\n    flex: 1;\n    flex-direction: row;\n    width: 100%;\n  }\n[data-page=\"Dispatch\"] .left {\n\n    flex-direction: column;\n    width: 480px;\n    margin-right: 24px;\n  }\n[data-page=\"Dispatch\"] .section-title {\n\n    font-size: 26px;\n    color: #7d8ea8;\n    margin-bottom: 12px;\n  }\n[data-page=\"Dispatch\"] .cars {\n\n    flex-direction: column;\n    width: 100%;\n  }\n[data-page=\"Dispatch\"] .car {\n\n    flex-direction: column;\n    width: 100%;\n    padding: 14px 18px 14px 18px;\n    margin-bottom: 12px;\n    border-radius: 20px;\n    background-color: #16223a;\n  }\n[data-page=\"Dispatch\"] .car-head {\n\n    flex-direction: row;\n    align-items: center;\n  }\n[data-page=\"Dispatch\"] .car-id {\n\n    font-size: 25px;\n    font-weight: bold;\n    color: #e2e8f0;\n  }\n[data-page=\"Dispatch\"] .dot {\n\n    width: 14px;\n    height: 14px;\n    border-radius: 7px;\n    margin-left: 12px;\n  }\n[data-page=\"Dispatch\"] .car-link {\n\n    font-size: 20px;\n    margin-left: 8px;\n  }\n[data-page=\"Dispatch\"] .car-zone {\n\n    font-size: 21px;\n    color: #8fa3bf;\n    margin-top: 6px;\n  }\n[data-page=\"Dispatch\"] .car-meta {\n\n    font-size: 20px;\n    color: #64748b;\n    margin-top: 4px;\n  }\n[data-page=\"Dispatch\"] .note {\n\n    flex-direction: column;\n    width: 100%;\n    padding: 16px 18px 16px 18px;\n    border-radius: 20px;\n    background-color: rgba(255, 107, 107, 0.12);\n  }\n[data-page=\"Dispatch\"] .note-title {\n\n    font-size: 22px;\n    font-weight: bold;\n    color: #ff9b9b;\n  }\n[data-page=\"Dispatch\"] .note-text {\n\n    font-size: 21px;\n    color: #d9a2a2;\n    margin-top: 6px;\n  }\n[data-page=\"Dispatch\"] .right {\n\n    flex: 1;\n    flex-direction: column;\n  }\n[data-page=\"Dispatch\"] .tasks {\n\n    flex-direction: row;\n    flex-wrap: wrap;\n    width: 100%;\n  }\n[data-page=\"Dispatch\"] .task {\n\n    flex-direction: column;\n    width: 640px;\n    padding: 20px 22px 18px 22px;\n    margin: 0px 20px 18px 0px;\n    border-radius: 26px;\n    background-color: #16223a;\n  }\n[data-page=\"Dispatch\"] .task-line {\n\n    flex-direction: row;\n    align-items: center;\n    justify-content: space-between;\n  }\n[data-page=\"Dispatch\"] .task-zone {\n\n    font-size: 27px;\n    font-weight: bold;\n    color: #e2e8f0;\n  }\n[data-page=\"Dispatch\"] .badge {\n\n    padding: 5px 14px 5px 14px;\n    border-radius: 16px;\n  }\n[data-page=\"Dispatch\"] .badge-text {\n\n    font-size: 20px;\n  }\n[data-page=\"Dispatch\"] .task-detail {\n\n    font-size: 21px;\n    color: #8fa3bf;\n    margin-top: 8px;\n  }\n[data-page=\"Dispatch\"] .task-foot {\n\n    flex-direction: row;\n    justify-content: space-between;\n    margin-top: 8px;\n  }\n[data-page=\"Dispatch\"] .task-route {\n\n    font-size: 20px;\n    color: #64748b;\n  }\n[data-page=\"Dispatch\"] .task-progress {\n\n    font-size: 20px;\n    color: #64748b;\n  }\n[data-page=\"Dispatch\"] .actions {\n\n    flex-direction: row;\n    margin-top: 12px;\n  }\n[data-page=\"Dispatch\"] .btn {\n\n    justify-content: center;\n    align-items: center;\n    height: 48px;\n    padding: 0px 26px 0px 26px;\n    margin-right: 12px;\n    border-radius: 24px;\n    background-color: #23324f;\n  }\n[data-page=\"Dispatch\"] .btn-primary {\n\n    background-color: #2f6df6;\n  }\n[data-page=\"Dispatch\"] .btn-text {\n\n    font-size: 22px;\n    color: #cbd5e1;\n  }\n[data-page=\"Dispatch\"] .btn-text-primary {\n\n    font-size: 22px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"Dispatch\"] .footer {\n\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    height: 76px;\n    padding: 0px 20px 0px 20px;\n    border-radius: 24px;\n    background-color: #16223a;\n  }\n[data-page=\"Dispatch\"] .dock-btn {\n\n    justify-content: center;\n    align-items: center;\n    height: 52px;\n    padding: 0px 26px 0px 26px;\n    margin-right: 14px;\n    border-radius: 26px;\n    background-color: #23324f;\n  }\n[data-page=\"Dispatch\"] .dock-primary {\n\n    background-color: #2f6df6;\n  }\n[data-page=\"Dispatch\"] .dock-text {\n\n    font-size: 23px;\n    color: #cbd5e1;\n  }\n[data-page=\"Dispatch\"] .dock-text-primary {\n\n    font-size: 23px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"Dispatch\"] .footer-hint {\n\n    flex: 1;\n    font-size: 19px;\n    color: #64748b;\n    text-align: right;\n  }","script":"\n\n\n\n  return {\n    private: {\n      headline: '—',\n      alertText: '—',\n      cars: [],\n      zones: []\n    },\n\n    onInit() {\n      this.refresh()\n      const self = this\n      source.onUpdate(function () {\n        self.refresh()\n      })\n    },\n\n    onShow() {\n      this.refresh()\n    },\n\n    onRefresh() {\n      this.refresh()\n    },\n\n    refresh() {\n      const snap = source.get()\n      if (!snap) {\n        this.headline = '正在连接数据源…'\n        return\n      }\n\n      const cars = snap.cars.map(function (c) {\n        return Object.assign({}, c, {\n          dotStyle: 'background-color: ' + (c.online ? '#3ddc84' : '#fbbf24'),\n          linkStyle: 'color: ' + (c.online ? '#3ddc84' : '#fbbf24'),\n          batteryText: c.online ? c.battery + '%' : '—'\n        })\n      })\n      this.cars = cars\n\n      const zones = snap.zones.map(function (z) {\n        const st = store.statusOf(z.status)\n        return Object.assign({}, z, {\n          badgeStyle: 'background-color: ' + st.bg,\n          badgeTextStyle: 'color: ' + st.color\n        })\n      })\n      this.zones = zones\n\n      const s = snap.summary\n      this.headline = '已完成 ' + s.counts.done + ' / ' + s.total +\n        ' · 阻塞 ' + s.counts.blocked + ' · 离线 ' + s.counts.offline\n\n      const blocked = zones.filter(function (z) {\n        return z.status === 'blocked'\n      })\n      if (blocked.length > 0) {\n        this.alertText = blocked[0].name + '：' + blocked[0].detail +\n          '。可按「一键取消全部」撤下未完成任务后重派。'\n      } else {\n        this.alertText = '当前没有待处理异常。'\n      }\n    },\n\n    zoneIdOf(e) {\n      return e && e.target && e.target.attr ? e.target.attr.tid : ''\n    },\n\n\n    handle(result) {\n      const self = this\n      Promise.resolve(result).then(function (r) {\n        prompt.showToast({ message: r && r.message ? r.message : '已下发', duration: 2000 })\n        self.refresh()\n      })\n    },\n\n    onDispatch(e) {\n      const id = this.zoneIdOf(e)\n      this.handle(source.dispatch(id))\n    },\n\n    onCancel(e) {\n      const id = this.zoneIdOf(e)\n      this.handle(source.cancel(id))\n    },\n\n    onStartAll() {\n      const zones = this.zones.filter(function (z) {\n        return z.status === 'idle' || z.status === 'blocked'\n      })\n      const self = this\n      if (zones.length === 0) {\n        prompt.showToast({ message: '没有待派发的任务', duration: 2000 })\n        return\n      }\n      Promise.all(zones.map(function (z) {\n        return Promise.resolve(source.dispatch(z.id))\n      })).then(function (rs) {\n        const ok = rs.filter(function (r) {\n          return r && r.ok\n        }).length\n        prompt.showToast({\n          message: '已派发 ' + ok + ' / ' + zones.length + ' 个任务',\n          duration: 2500\n        })\n        self.refresh()\n      })\n    },\n\n    onCancelAll() {\n      this.handle(source.cancelAll())\n    },\n\n    goBack() {\n      router.back()\n    }\n  }\n"},"Zones":{"name":"Zones","path":"/zones","html":"<div class=\"screen\">\n    <div class=\"topbar\">\n      <div class=\"back\" data-act=\"goBack\">\n        <span class=\"back-text\">返回</span>\n      </div>\n      <span class=\"topbar-title\">区域与路线</span>\n      <div class=\"chip\">\n        <span class=\"chip-text\"><b data-bind=\"zones.length\"></b> 个区域 · 固定路线</span>\n      </div>\n    </div>\n\n    <span class=\"section-title\">首期只做「固定区域 + 固定路线」，保证车端可复现</span>\n\n    <div class=\"grid\">\n      <div class=\"card\" data-each=\"zones\">\n        <div class=\"card-head\">\n          <div class=\"zone-tag\" data-style=\"$item.tagStyle\">\n            <span class=\"zone-tag-text\"><b data-bind=\"$item.id\"></b></span>\n          </div>\n          <span class=\"zone-name\"><b data-bind=\"$item.name\"></b></span>\n        </div>\n\n        <div class=\"row\">\n          <span class=\"row-label\">路线编号</span>\n          <span class=\"row-value\"><b data-bind=\"$item.route\"></b></span>\n        </div>\n        <div class=\"row\">\n          <span class=\"row-label\">动作序列</span>\n          <span class=\"row-value\"><b data-bind=\"$item.routeDesc\"></b></span>\n        </div>\n        <div class=\"row\">\n          <span class=\"row-label\">责任车辆</span>\n          <span class=\"row-value\"><b data-bind=\"$item.car\"></b></span>\n        </div>\n        <div class=\"row\">\n          <span class=\"row-label\">本轮用时</span>\n          <span class=\"row-value\"><b data-bind=\"$item.duration\"></b></span>\n        </div>\n\n        <div class=\"detail\" data-style=\"$item.badgeStyle\">\n          <span class=\"detail-text\" data-style=\"$item.badgeTextStyle\"><b data-bind=\"$item.statusText\"></b> · <b data-bind=\"$item.detail\"></b></span>\n        </div>\n      </div>\n    </div>\n\n    <div class=\"footer\">\n      <span class=\"footer-hint\">新增区域只需扩展端侧预设表 src/common/store.js 的 ZONES</span>\n      <div class=\"dock-btn\" data-act=\"goDispatch\">\n        <span class=\"dock-text\">去派单</span>\n      </div>\n    </div>\n  </div>","css":"[data-page=\"Zones\"] .screen {\n\n    flex-direction: column;\n    width: 100%;\n    height: 100%;\n    padding: 18px 22px 18px 22px;\n    background-color: #0b1220;\n  }\n[data-page=\"Zones\"] .topbar {\n\n    flex-direction: row;\n    align-items: center;\n    height: 62px;\n    margin-bottom: 12px;\n  }\n[data-page=\"Zones\"] .back {\n\n    justify-content: center;\n    align-items: center;\n    height: 48px;\n    padding: 0px 24px 0px 24px;\n    border-radius: 24px;\n    background-color: #16223a;\n  }\n[data-page=\"Zones\"] .back-text {\n\n    font-size: 23px;\n    color: #cbd5e1;\n  }\n[data-page=\"Zones\"] .topbar-title {\n\n    flex: 1;\n    font-size: 30px;\n    font-weight: bold;\n    color: #ffffff;\n    margin-left: 18px;\n  }\n[data-page=\"Zones\"] .chip {\n\n    padding: 8px 18px 8px 18px;\n    border-radius: 20px;\n    background-color: #1d2a44;\n  }\n[data-page=\"Zones\"] .chip-text {\n\n    font-size: 21px;\n    color: #a9c1e0;\n  }\n[data-page=\"Zones\"] .section-title {\n\n    font-size: 22px;\n    color: #7d8ea8;\n    margin-bottom: 12px;\n  }\n[data-page=\"Zones\"] .grid {\n\n    flex: 1;\n    flex-direction: row;\n    flex-wrap: wrap;\n    width: 100%;\n  }\n[data-page=\"Zones\"] .card {\n\n    flex-direction: column;\n    width: 590px;\n    padding: 20px 24px 18px 24px;\n    margin: 0px 24px 20px 0px;\n    border-radius: 26px;\n    background-color: #16223a;\n  }\n[data-page=\"Zones\"] .card-head {\n\n    flex-direction: row;\n    align-items: center;\n    margin-bottom: 12px;\n  }\n[data-page=\"Zones\"] .zone-tag {\n\n    justify-content: center;\n    align-items: center;\n    width: 62px;\n    height: 62px;\n    border-radius: 18px;\n  }\n[data-page=\"Zones\"] .zone-tag-text {\n\n    font-size: 26px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"Zones\"] .zone-name {\n\n    font-size: 30px;\n    font-weight: bold;\n    color: #e2e8f0;\n    margin-left: 16px;\n  }\n[data-page=\"Zones\"] .row {\n\n    flex-direction: row;\n    justify-content: space-between;\n    padding: 6px 0px 6px 0px;\n  }\n[data-page=\"Zones\"] .row-label {\n\n    font-size: 21px;\n    color: #64748b;\n  }\n[data-page=\"Zones\"] .row-value {\n\n    font-size: 21px;\n    color: #cbd5e1;\n  }\n[data-page=\"Zones\"] .detail {\n\n    width: 100%;\n    padding: 12px 16px 12px 16px;\n    margin-top: 10px;\n    border-radius: 16px;\n  }\n[data-page=\"Zones\"] .detail-text {\n\n    font-size: 21px;\n  }\n[data-page=\"Zones\"] .footer {\n\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    height: 72px;\n    padding: 0px 20px 0px 20px;\n    border-radius: 24px;\n    background-color: #16223a;\n  }\n[data-page=\"Zones\"] .footer-hint {\n\n    flex: 1;\n    font-size: 20px;\n    color: #64748b;\n  }\n[data-page=\"Zones\"] .dock-btn {\n\n    justify-content: center;\n    align-items: center;\n    height: 50px;\n    padding: 0px 28px 0px 28px;\n    border-radius: 25px;\n    background-color: #2f6df6;\n  }\n[data-page=\"Zones\"] .dock-text {\n\n    font-size: 23px;\n    font-weight: bold;\n    color: #ffffff;\n  }","script":"\n\n\n  return {\n    private: {\n      zones: []\n    },\n\n    onInit() {\n      this.refresh()\n      const self = this\n      source.onUpdate(function () {\n        self.refresh()\n      })\n    },\n\n    onShow() {\n      this.refresh()\n    },\n\n    refresh() {\n      const snap = source.get()\n      if (!snap) {\n        return\n      }\n      const palette = ['#2F6DF6', '#0EA5A4', '#7C5CFF', '#F59E0B']\n      this.zones = snap.zones.map(function (z, i) {\n        const st = store.statusOf(z.status)\n        return Object.assign({}, z, {\n          tagStyle: 'background-color: ' + palette[i % palette.length],\n          badgeStyle: 'background-color: ' + st.bg,\n          badgeTextStyle: 'color: ' + st.color\n        })\n      })\n    },\n\n    goDispatch() {\n      router.push({ uri: '/dispatch' })\n    },\n\n    goBack() {\n      router.back()\n    }\n  }\n"},"Records":{"name":"Records","path":"/records","html":"<div class=\"screen\">\n    <div class=\"topbar\">\n      <div class=\"back\" data-act=\"goBack\">\n        <span class=\"back-text\">返回</span>\n      </div>\n      <span class=\"topbar-title\">巡检记录</span>\n      <div class=\"chip\">\n        <span class=\"chip-text\">按轮次回看覆盖情况</span>\n      </div>\n    </div>\n\n    <div class=\"list\">\n      <div class=\"record\" data-each=\"records\">\n        <div class=\"rec-head\">\n          <span class=\"rec-round\"><b data-bind=\"$item.round\"></b></span>\n          <span class=\"rec-time\"><b data-bind=\"$item.time\"></b></span>\n        </div>\n        <div class=\"zones\">\n          <div class=\"zone\" data-each=\"$item.zones\">\n            <span class=\"zone-name\"><b data-bind=\"$item.name\"></b></span>\n            <div class=\"badge\" data-style=\"$item.bg\">\n              <span class=\"badge-text\" data-style=\"$item.color\"><b data-bind=\"$item.statusText\"></b></span>\n            </div>\n          </div>\n        </div>\n        <span class=\"rec-summary\"><b data-bind=\"$item.summary\"></b></span>\n      </div>\n    </div>\n\n    <div class=\"footer\">\n      <span class=\"footer-hint\">每轮为四个区域各保留一条状态，形成可追溯台账</span>\n    </div>\n  </div>","css":"[data-page=\"Records\"] .screen {\n\n    flex-direction: column;\n    width: 100%;\n    height: 100%;\n    padding: 27px 33px 27px 33px;\n    background-color: #0b1220;\n  }\n[data-page=\"Records\"] .topbar {\n\n    flex-direction: row;\n    align-items: center;\n    height: 93px;\n    margin-bottom: 18px;\n  }\n[data-page=\"Records\"] .back {\n\n    justify-content: center;\n    align-items: center;\n    height: 72px;\n    padding: 0px 36px 0px 36px;\n    border-radius: 36px;\n    background-color: #16223a;\n  }\n[data-page=\"Records\"] .back-text {\n\n    font-size: 35px;\n    color: #cbd5e1;\n  }\n[data-page=\"Records\"] .topbar-title {\n\n    flex: 1;\n    font-size: 45px;\n    font-weight: bold;\n    color: #ffffff;\n    margin-left: 27px;\n  }\n[data-page=\"Records\"] .chip {\n\n    padding: 12px 27px 12px 27px;\n    border-radius: 30px;\n    background-color: #1d2a44;\n  }\n[data-page=\"Records\"] .chip-text {\n\n    font-size: 32px;\n    color: #a9c1e0;\n  }\n[data-page=\"Records\"] .list {\n\n    flex: 1;\n    flex-direction: column;\n    width: 100%;\n  }\n[data-page=\"Records\"] .record {\n\n    flex-direction: column;\n    width: 100%;\n    padding: 27px 33px 24px 33px;\n    margin-bottom: 21px;\n    border-radius: 36px;\n    background-color: #16223a;\n  }\n[data-page=\"Records\"] .rec-head {\n\n    flex-direction: row;\n    align-items: center;\n    justify-content: space-between;\n  }\n[data-page=\"Records\"] .rec-round {\n\n    font-size: 44px;\n    font-weight: bold;\n    color: #e2e8f0;\n  }\n[data-page=\"Records\"] .rec-time {\n\n    font-size: 32px;\n    color: #64748b;\n  }\n[data-page=\"Records\"] .zones {\n\n    flex-direction: row;\n    margin-top: 18px;\n  }\n[data-page=\"Records\"] .zone {\n\n    flex-direction: row;\n    align-items: center;\n    margin-right: 39px;\n  }\n[data-page=\"Records\"] .zone-name {\n\n    font-size: 33px;\n    color: #a9c1e0;\n    margin-right: 12px;\n  }\n[data-page=\"Records\"] .badge {\n\n    padding: 6px 18px 6px 18px;\n    border-radius: 21px;\n  }\n[data-page=\"Records\"] .badge-text {\n\n    font-size: 29px;\n  }\n[data-page=\"Records\"] .rec-summary {\n\n    font-size: 32px;\n    color: #8fa3bf;\n    margin-top: 18px;\n  }\n[data-page=\"Records\"] .footer {\n\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    height: 99px;\n    padding: 0px 30px 0px 30px;\n    border-radius: 36px;\n    background-color: #16223a;\n  }\n[data-page=\"Records\"] .footer-hint {\n\n    flex: 1;\n    font-size: 30px;\n    color: #64748b;\n  }","script":"\n\n\n  return {\n    private: {\n      records: []\n    },\n\n    onInit() {\n      this.records = this.build()\n      const self = this\n      source.onUpdate(function () {\n        self.records = self.build()\n      })\n    },\n\n    onShow() {\n      this.records = this.build()\n    },\n\n    build() {\n      const snap = source.get()\n      if (!snap) {\n        return []\n      }\n      // store 只提供原始状态键（result），这里把状态文案与配色拍平成\n      // style 字符串，模板里直接绑定，避免在模板中做判断\n      return snap.records.map(function (r) {\n        const zones = r.zones.map(function (z) {\n          const st = store.statusOf(z.result)\n          return {\n            name: z.name,\n            statusText: st.text,\n            bg: 'background-color: ' + st.bg,\n            color: 'color: ' + st.color\n          }\n        })\n        return {\n          round: r.round,\n          time: r.time,\n          summary: r.summary,\n          zones: zones\n        }\n      })\n    },\n\n    goBack() {\n      router.back()\n    }\n  }\n"},"System":{"name":"System","path":"/system","html":"<div class=\"screen\">\n    <div class=\"topbar\">\n      <div class=\"back\" data-act=\"goBack\">\n        <span class=\"back-text\">返回</span>\n      </div>\n      <span class=\"topbar-title\">系统与网络</span>\n      <div class=\"chip\">\n        <span class=\"chip-text\"><b data-bind=\"checkText\"></b></span>\n      </div>\n    </div>\n\n    <div class=\"body\">\n      <!-- ---------- 左：设备与通信 ---------- -->\n      <div class=\"col\">\n        <span class=\"section-title\">设备</span>\n        <div class=\"panel\">\n          <div class=\"row\" data-each=\"device\">\n            <span class=\"row-label\"><b data-bind=\"$item.k\"></b></span>\n            <span class=\"row-value\"><b data-bind=\"$item.v\"></b></span>\n          </div>\n        </div>\n\n        <span class=\"section-title\">通信 · C1 Wi-Fi</span>\n        <div class=\"panel\">\n          <div class=\"row\" data-each=\"links\">\n            <span class=\"row-label\"><b data-bind=\"$item.id\"></b></span>\n            <span class=\"row-value\"><b data-bind=\"$item.ip\"></b></span>\n            <span class=\"row-state\" data-style=\"$item.style\"><b data-bind=\"$item.state\"></b></span>\n          </div>\n        </div>\n      </div>\n\n      <!-- ---------- 右：能力与配置 ---------- -->\n      <div class=\"col\">\n        <span class=\"section-title\">端侧 AI 配置（语音助手依赖）</span>\n        <div class=\"panel\">\n          <div class=\"row\" data-each=\"aiConfig\">\n            <span class=\"row-label\"><b data-bind=\"$item.k\"></b></span>\n            <span class=\"row-value\"><b data-bind=\"$item.v\"></b></span>\n          </div>\n        </div>\n\n        <span class=\"section-title\">能力开关</span>\n        <div class=\"panel\">\n          <div class=\"row\" data-each=\"caps\">\n            <span class=\"row-label\"><b data-bind=\"$item.name\"></b></span>\n            <div class=\"badge\" data-style=\"$item.style\">\n              <span class=\"badge-text\" data-style=\"$item.textStyle\"><b data-bind=\"$item.state\"></b></span>\n            </div>\n          </div>\n        </div>\n\n        <div class=\"actions\">\n          <div class=\"btn btn-primary\" data-act=\"runCheck\">\n            <span class=\"btn-text-primary\">重新自检</span>\n          </div>\n          <div class=\"btn\" data-act=\"goVoice\">\n            <span class=\"btn-text\">打开语音助手</span>\n          </div>\n        </div>\n      </div>\n    </div>\n\n    <div class=\"footer\">\n      <span class=\"footer-hint\"><b data-bind=\"footer\"></b></span>\n    </div>\n  </div>","css":"[data-page=\"System\"] .screen {\n\n    flex-direction: column;\n    width: 100%;\n    height: 100%;\n    padding: 16px 30px 16px 30px;\n    background-color: #0b1220;\n  }\n[data-page=\"System\"] .topbar {\n\n    flex-direction: row;\n    align-items: center;\n    height: 60px;\n    margin-bottom: 8px;\n  }\n[data-page=\"System\"] .back {\n\n    justify-content: center;\n    align-items: center;\n    height: 50px;\n    padding: 0px 26px 0px 26px;\n    border-radius: 36px;\n    background-color: #16223a;\n  }\n[data-page=\"System\"] .back-text {\n\n    font-size: 35px;\n    color: #cbd5e1;\n  }\n[data-page=\"System\"] .topbar-title {\n\n    flex: 1;\n    font-size: 45px;\n    font-weight: bold;\n    color: #ffffff;\n    margin-left: 27px;\n  }\n[data-page=\"System\"] .chip {\n\n    padding: 12px 27px 12px 27px;\n    border-radius: 30px;\n    background-color: #1d2a44;\n  }\n[data-page=\"System\"] .chip-text {\n\n    font-size: 32px;\n    color: #a9c1e0;\n  }\n[data-page=\"System\"] .body {\n\n    flex: 1;\n    flex-direction: row;\n    width: 100%;\n  }\n[data-page=\"System\"] .col {\n\n    flex-direction: column;\n    flex: 1;\n    margin-right: 27px;\n  }\n[data-page=\"System\"] .section-title {\n\n    font-size: 28px;\n    color: #7d8ea8;\n    margin-bottom: 8px;\n  }\n[data-page=\"System\"] .panel {\n\n    flex-direction: column;\n    width: 100%;\n    padding: 2px 22px 2px 22px;\n    margin-bottom: 8px;\n    border-radius: 33px;\n    background-color: #16223a;\n  }\n[data-page=\"System\"] .row {\n\n    flex-direction: row;\n    align-items: center;\n    justify-content: space-between;\n    padding: 6px 0px 6px 0px;\n  }\n[data-page=\"System\"] .row-label {\n\n    font-size: 32px;\n    color: #7d8ea8;\n  }\n[data-page=\"System\"] .row-value {\n\n    flex: 1;\n    font-size: 32px;\n    color: #cbd5e1;\n    text-align: right;\n  }\n[data-page=\"System\"] .row-state {\n\n    font-size: 32px;\n    margin-left: 21px;\n  }\n[data-page=\"System\"] .badge {\n\n    padding: 5px 16px 5px 16px;\n    border-radius: 24px;\n  }\n[data-page=\"System\"] .badge-text {\n\n    font-size: 30px;\n  }\n[data-page=\"System\"] .actions {\n\n    flex-direction: row;\n  }\n[data-page=\"System\"] .btn {\n\n    justify-content: center;\n    align-items: center;\n    height: 54px;\n    padding: 0px 32px 0px 32px;\n    margin-right: 16px;\n    border-radius: 41px;\n    background-color: #23324f;\n  }\n[data-page=\"System\"] .btn-primary {\n\n    background-color: #2f6df6;\n  }\n[data-page=\"System\"] .btn-text {\n\n    font-size: 35px;\n    color: #cbd5e1;\n  }\n[data-page=\"System\"] .btn-text-primary {\n\n    font-size: 35px;\n    font-weight: bold;\n    color: #ffffff;\n  }\n[data-page=\"System\"] .footer {\n\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    padding: 9px 20px 9px 20px;\n    border-radius: 22px;\n    background-color: #16223a;\n  }\n[data-page=\"System\"] .footer-hint {\n\n    flex: 1;\n    font-size: 30px;\n    color: #64748b;\n  }","script":"\n\n\n  return {\n    private: {\n      checkText: '自检中…',\n      footer: '',\n      device: [\n        { k: '设备名称', v: 'VelaGuard 巡检调度台' },\n        { k: '系统', v: 'Linux（M1 · Horizon X3M）' },\n        { k: '主控', v: 'U2P · Horizon X3M' },\n        { k: '通信', v: 'C1 · Wi-Fi + BLE' },\n        { k: '交互外设', v: 'U1P · GD32F470ZKT6' },\n        { k: '屏幕', v: '外接触控显示器' }\n      ],\n      links: [],\n      aiConfig: [\n        { k: '界面形态', v: '浏览器全屏看板' },\n        { k: '数据通道', v: 'JSON 文件 / 本地接口' },\n        { k: '语音识别', v: '本地指令表' },\n        { k: '大模型', v: '未接入（离线运行）' },\n        { k: '当前状态', v: '待自检' }\n      ],\n      caps: []\n    },\n\n    onInit() {\n      this.buildStatic()\n      this.runCheck()\n      const self = this\n      source.onUpdate(function () {\n        self.runCheck()\n      })\n    },\n\n    buildStatic() {\n      const snap = source.get()\n      const cars = snap ? snap.cars : []\n      this.links = cars.map(function (c) {\n        return {\n          id: c.id + ' · ' + c.zone,\n          ip: c.ip,\n          state: c.online ? '在线' : '离线',\n          style: 'color: ' + (c.online ? '#3ddc84' : '#fbbf24')\n        }\n      })\n\n      const yes = { state: '已启用', style: 'background-color: rgba(61,220,132,0.16)', textStyle: 'color: #3ddc84' }\n      const reserve = { state: '预留', style: 'background-color: rgba(148,163,184,0.16)', textStyle: 'color: #94a3b8' }\n      this.caps = [\n        Object.assign({ name: '区域与任务清单' }, yes),\n        Object.assign({ name: '任务派单与回收' }, yes),\n        Object.assign({ name: '异常提示与一键取消' }, yes),\n        Object.assign({ name: '巡检记录汇总' }, yes),\n        Object.assign({ name: '语音控制（本地指令）' }, yes),\n        Object.assign({ name: 'S3 麦克风语音识别' }, reserve),\n        Object.assign({ name: '实时视频回传' }, reserve),\n        Object.assign({ name: '云端 AI 服务' }, reserve)\n      ]\n    },\n\n    runCheck() {\n      const snap = source.get()\n      if (!snap) {\n        this.checkText = '未连接'\n        return\n      }\n      let online = 0\n      snap.cars.forEach(function (c) {\n        if (c.online) {\n          online += 1\n        }\n      })\n\n      this.checkText = '数据源：' + snap.sourceText + (snap.connected ? '' : '（断连）')\n\n      const aiConfig = this.aiConfig.slice()\n      aiConfig[4] = {\n        k: '当前状态',\n        v: snap.sourceText + ' · 更新于 ' + snap.lastUpdateText\n      }\n      this.aiConfig = aiConfig\n\n      const s = snap.summary\n      this.footer = '本轮覆盖：已完成 ' + s.counts.done + ' / ' + s.total +\n        '，阻塞 ' + s.counts.blocked + '，离线 ' + s.counts.offline +\n        '。当前数据源为「' + snap.sourceText + '」，可在桌面点击数据源标签切换。'\n    },\n\n    goVoice() {\n      router.push({ uri: '/voice' })\n    },\n\n    goBack() {\n      router.back()\n    }\n  }\n"}}
+const ICONS = ["logo.png","icon-voice.png","icon-dispatch.png","icon-zones.png","icon-records.png","icon-system.png"]
+/*
+ * 设计基准尺寸。目标设备（M1 + E5 触控屏）实测帧缓冲为 1920x1080，
+ * 界面按同尺寸设计即可 1:1 铺满整屏、无黑边。
+ * designHeight 缺省时按 16:10 推算，保持向后兼容。
+ */
+const DESIGN = {
+  width: 1920,
+  height: 1080
+}
+
+/* ---------------- 渲染引擎 ---------------- */
+const nodeData = new WeakMap()
+
+function el(tag, attrs, children) {
+  const n = { tag: tag, attrs: attrs || {}, children: children || [] }
+  return n
+}
+
+/** 解析运行期标记串为节点树 */
+function parse(html) {
+  const doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html')
+  return convert(doc.body.firstElementChild)
+}
+
+function convert(dom, depth) {
+  if (!dom) {
+    return { text: '' }
+  }
+  // 只处理元素节点与文本节点；注释（nodeType 8）、文档类型等一律跳过。
+  // 模板里的 <!-- --> 说明注释会以 nodeType 8 出现，早期版本未过滤会导致
+  // 读取 attributes 报 TypeError，这里显式放行。
+  if (dom.nodeType !== 1) {
+    if (dom.nodeType === 3) {
+      return { text: dom.textContent }
+    }
+    return { text: '' }
+  }
+
+  // 用 getAttributeNames/getAttribute 读取属性：比 attributes 集合更稳，
+  // 也避免在不同宿主环境下遇到 attributes 缺失导致的 TypeError。
+  const attrs = {}
+  const names = typeof dom.getAttributeNames === 'function' ? dom.getAttributeNames() : []
+  for (let i = 0; i < names.length; i += 1) {
+    attrs[names[i]] = dom.getAttribute(names[i])
+  }
+
+  const kids = dom.childNodes || []
+  const children = []
+  for (let i = 0; i < kids.length; i += 1) {
+    children.push(convert(kids[i], (depth || 0) + 1))
+  }
+
+  return {
+    tag: String(dom.tagName || 'div').toLowerCase(),
+    attrs: attrs,
+    children: children
+  }
+}
+
+/** 取属性上的绑定值：data-bind / data-if / data-style / data-class 里是数据路径 */
+function pickByPath(data, expr) {
+  const parts = String(expr).trim().split('.')
+  let cur = data
+  for (let i = 0; i < parts.length; i += 1) {
+    if (cur === null || cur === undefined) {
+      return undefined
+    }
+    cur = cur[parts[i]]
+  }
+  return cur
+}
+
+function resolvePath(path, scope) {
+  if (scope && Object.prototype.hasOwnProperty.call(scope, path)) {
+    return scope[path]
+  }
+  if (path.indexOf('$item') === 0) {
+    const rest = path.slice(5).replace(/^\./, '')
+    return rest ? pickByPath(scope.$item, rest) : scope.$item
+  }
+  if (path === '$index') {
+    return scope.$index
+  }
+  return pickByPath(scope, path)
+}
+
+function renderNode(node, scope, out) {
+  if (node.text !== undefined) {
+    if (node.text.trim()) {
+      out.push(document.createTextNode(node.text))
+    }
+    return
+  }
+
+  const attrs = node.attrs
+
+  // data-if
+  if (attrs['data-if'] !== undefined) {
+    const v = resolvePath(attrs['data-if'], scope)
+    if (!v) {
+      return
+    }
+  }
+
+  // data-each：把同一个元素按数组重复，不引入包裹元素（包裹元素会破坏
+  // 父级 flex 布局，例如栅格与横向行）。
+  // 关键点：递归时必须把 data-each 从节点上摘掉，否则会重复进入这一分支，
+  // 造成无限递归（RangeError: Maximum call stack size exceeded）。
+  if (attrs['data-each'] !== undefined && node.loopDone !== true) {
+    const list = resolvePath(attrs['data-each'], scope)
+    const arr = Array.isArray(list) ? list : []
+    const clone = { tag: node.tag, attrs: attrs, children: node.children, loopDone: true }
+    arr.forEach(function (item, i) {
+      const inner = Object.create(scope)
+      inner.$item = item
+      inner.$index = i
+      renderNode(clone, inner, out)
+    })
+    return
+  }
+
+  let tag = node.tag
+  if (tag === 'each') {
+    tag = 'div'
+  }
+  let dom
+  if (tag === 'image' || tag === 'img') {
+    dom = document.createElement('div')
+  } else if (tag === 'input') {
+    dom = document.createElement('div')
+  } else {
+    dom = document.createElement(tag)
+  }
+
+  Object.keys(attrs).forEach(function (k) {
+    const v = attrs[k]
+    /*
+     * data-touch 走透传：留在 DOM 上（真机读得到），
+     * 但实际的事件绑定在 rootEl 上统一做，见 bindInput()。
+     */
+    if (k === 'data-if' || k === 'data-each' || k === 'data-act' || k === 'data-tid' || k === 'data-touch') {
+      return
+    }
+    if (k === 'data-bind') {
+      return
+    }
+    if (k === 'data-style') {
+      const sv = resolvePath(v, scope)
+      if (sv) {
+        dom.setAttribute('style', sv)
+      }
+      return
+    }
+    if (k === 'data-class') {
+      const cv = resolvePath(v, scope)
+      if (cv) {
+        dom.className = (dom.className ? dom.className + ' ' : '') + cv
+      }
+      return
+    }
+    if (k === 'class') {
+      dom.className = (dom.className ? dom.className + ' ' : '') + v
+      return
+    }
+    if (k === 'scroll-y') {
+      dom.style.overflowY = 'auto'
+      return
+    }
+    dom.setAttribute(k, v)
+  })
+
+  // 文本绑定：{{expr}} 会被转成内嵌的 <b data-bind>
+  node.children.forEach(function (c) {
+    if (c.tag === 'b' && c.attrs['data-bind'] !== undefined) {
+      const v = resolvePath(c.attrs['data-bind'], scope)
+      dom.appendChild(document.createTextNode(v === undefined || v === null ? '' : String(v)))
+    } else {
+      renderNode(c, scope, { push: function (n) { dom.appendChild(n) } })
+    }
+  })
+
+  if (attrs['data-act']) {
+    /*
+     * 触控屏上不需要手型光标，设为 none 与全局 cursor:none 保持一致。
+     * （原先设的是 'pointer'，会在触屏上重新露出光标。）
+     */
+    dom.style.cursor = 'none'
+    /*
+     * 打一个真实落到 DOM 上的标记属性。
+     *
+     * 为什么需要：data-act / data-tid / data-style 这些在预览渲染时
+     * **只进委托表、不写进 DOM**。于是「先 closest 找到可交互元素、
+     * 再查委托表」这类写法在预览里必然失配 —— 表现为按下毫无反应，
+     * 而真机上却是好的（真机走引擎自己的事件分发）。
+     * 有了这个标记，两种环境下的命中判断才是同一套逻辑。
+     *
+     * 名字带 vg- 前缀，不会和引擎保留属性冲突。
+     */
+    dom.setAttribute('data-vg-hit', '1')
+  }
+  /*
+   * tid 也是数据绑定（例如 tid="{{$item.uri}}"），必须求值后再登记；
+   * 直接存原始表达式会让处理函数收到字面量 "$item.uri"，
+   * 表现为「点了没反应」——这类静默失败很难排查，务必在这里解析。
+   */
+  const rawTid = attrs['data-tid']
+  const tid = rawTid === undefined ? undefined : resolvePath(rawTid, scope)
+  /*
+   * data-touch：真机上是「按下即响应」的语义。
+   * 这里先解析成方法名存进委托表，实际绑定在 rootEl 上统一做（见 bindInput）。
+   */
+  nodeData.set(dom, {
+    act: attrs['data-act'],
+    touch: attrs['data-touch'],
+    tid: tid,
+    scope: scope
+  })
+  out.push(dom)
+}
+
+/** 供自动化测试查询委托表：判断某个元素是否被登记为可交互 */
+function debugMeta(node) {
+  return nodeData.get(node) || null
+}
+
+/* ---------------- 页面实例 ---------------- */
+const frame = document.getElementById('frame')
+const rootEl = document.getElementById('root')
+const toastEl = document.getElementById('toast')
+const styleEls = {}
+
+let current = null
+let component = null
+let data = null
+let tree = null
+// 包着 data 的 Proxy。测试要改数据必须走它，否则不会重渲染（见 __velaguard.patch 的说明）
+let dataProxy = null
+
+function showToast(message) {
+  toastEl.textContent = message
+  toastEl.classList.add('show')
+  clearTimeout(showToast.t)
+  showToast.t = setTimeout(function () {
+    toastEl.classList.remove('show')
+  }, 2000)
+}
+
+/** 供页面脚本使用的宿主桩件 */
+function makeHost(pageKey) {
+  return {
+    router: {
+      push: function (o) { go(o.uri) },
+      replace: function (o) { go(o.uri) },
+      back: function () { go('/') },
+      clear: function () {}
+    },
+    prompt: {
+      showToast: function (o) { showToast(o && o.message ? o.message : '') }
+    },
+    velaclaw: {
+      ask: function (o) {
+        // 浏览器预览没有端侧 AI Agent，统一走 fail 让页面切到本地指令模式
+        setTimeout(function () {
+          if (o && o.fail) { o.fail({}, 404) }
+          if (o && o.complete) { o.complete() }
+        }, 200)
+      }
+    },
+    store: store,
+    source: source
+  }
+}
+
+function deepClone(o) {
+  return JSON.parse(JSON.stringify(o))
+}
+
+function build(pageKey) {
+  const page = PAGES[pageKey]
+  if (!page) {
+    return
+  }
+  current = pageKey
+
+  // 样式只注入一次（构建期已作用域化到 [data-page="<页面名>"]）
+  if (!styleEls[pageKey]) {
+    const s = document.createElement('style')
+    s.textContent = page.css
+    document.head.appendChild(s)
+    styleEls[pageKey] = s
+  }
+
+  // 编译脚本：import 已在构建期剥离，这里注入宿主桩件
+  const host = makeHost(pageKey)
+  /* eslint-disable no-new-func */
+  const factory = new Function(
+    'router', 'prompt', 'velaclaw', 'store', 'source',
+    '"use strict";' + page.script
+  )
+  component = factory(host.router, host.prompt, host.velaclaw, host.store, host.source)
+
+  data = deepClone(component.private || {})
+  // 递归代理：页面直接改 this.xxx 也要能触发重渲染
+  const proxy = new Proxy(data, {
+    set: function (target, key, value) {
+      target[key] = value
+      queueRender()
+      return true
+    }
+  })
+  dataProxy = proxy
+  component.data = proxy
+
+  // 把方法绑到 data 上，this 指向代理，页面里 this.x = 1 即可生效
+  Object.keys(component).forEach(function (k) {
+    if (typeof component[k] === 'function') {
+      proxy[k] = component[k].bind(proxy)
+    }
+  })
+
+  if (typeof component.onInit === 'function') {
+    component.onInit.call(proxy)
+  }
+
+  tree = parse(page.html)
+  doRender()
+  if (typeof component.onShow === 'function') {
+    component.onShow.call(proxy)
+  }
+
+  // 事件委托
+  bindInput()
+  rootEl.setAttribute('data-page', pageKey)
+  document.querySelectorAll('#pagelist button').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.page === pageKey)
+  })
+}
+
+/**
+ * 统一的事件委托（点击 + 触摸）。
+ *
+ * 为什么要区分：真机上 data-act 是「点击」，data-touch 是「按下」。
+ * 「按住说话」这类按钮必须按下就有反馈 —— 手指抬起才响的按钮，
+ * 在触屏上会让人以为没按到，从而反复按压。浏览器里等价的按下事件是
+ * touchstart（无触摸设备时退回 mousedown），为了不让后续合成的 click
+ * 再触发一次同一个处理函数，用 _touchHandledAt 记一下时间戳。
+ *
+ * ⚠️ 本文件整体被包在一个 JS 模板字符串里，注释里**不能出现反引号**，
+ *    否则模板字符串会提前结束（构建直接语法报错，实测踩过）。
+ */
+let _touchHandledAt = 0
+
+function findActNode(target) {
+  let n = target
+  while (n && n !== rootEl) {
+    const meta = nodeData.get(n)
+    if (meta && (meta.act || meta.touch)) {
+      return { el: n, meta: meta }
+    }
+    n = n.parentNode
+  }
+  return null
+}
+
+function invokeAct(meta, which) {
+  const name = which === 'touch' ? meta.touch : meta.act
+  if (!name) {
+    return false
+  }
+  const fn = component && component.data ? component.data[name] : null
+  if (typeof fn !== 'function') {
+    return false
+  }
+  fn({
+    target: {
+      attr: { tid: meta.tid },
+      data: {}
+    }
+  })
+  return true
+}
+
+function bindInput() {
+  /*
+   * 真实触摸：touchstart 命中 data-touch 的元素立刻处理。
+   * 注意不 preventDefault —— 否则会连带禁掉该元素上的滚动；
+   * 用时间戳而不是 preventDefault 来避免「按下 + 抬起的 click」双触发。
+   *
+   * ⚠️ 判断「可交互」必须用 data-vg-hit（renderNode 真正写进 DOM 的标记），
+   *    不能用 closest('[data-act]')：预览渲染时 data-act 只进委托表、
+   *    不落到 DOM 上，closest 永远匹配不到，按下就会毫无反应。
+   */
+  rootEl.ontouchstart = function (e) {
+    const t = e.target
+    if (t && t.closest && t.closest('[data-vg-hit]')) {
+      const hit = findActNode(t)
+      if (hit && invokeAct(hit.meta, 'touch')) {
+        _touchHandledAt = Date.now()
+      }
+    }
+  }
+
+  /*
+   * 无触摸设备（鼠标调试 / headless 测试）时，pointerdown 就是「按下」。
+   * 用它把按住的手感也带进桌面浏览器，方便自动化验证。
+   */
+  rootEl.onpointerdown = function (e) {
+    if (e.pointerType === 'touch' && Date.now() - _touchHandledAt < 1500) {
+      return
+    }
+    const t = e.target
+    if (t && t.closest && t.closest('[data-vg-hit]')) {
+      const hit = findActNode(t)
+      if (hit && invokeAct(hit.meta, 'touch')) {
+        _touchHandledAt = Date.now()
+      }
+    }
+  }
+
+  rootEl.onclick = function (e) {
+    // 按下时已经处理过：跳过这次 click，避免同一按触发两次
+    if (Date.now() - _touchHandledAt < 1500) {
+      return
+    }
+    const hit = findActNode(e.target)
+    if (hit) {
+      invokeAct(hit.meta, 'act')
+    }
+  }
+}
+
+let pending = false
+function queueRender() {
+  if (pending) {
+    return
+  }
+  pending = true
+  requestAnimationFrame(function () {
+    pending = false
+    doRender()
+  })
+}
+
+/**
+ * 重建前记录滚动位置，重建后还原。
+ *
+ * 为什么需要：doRender() 是**整棵 DOM 重建**（rootEl.textContent = ''），
+ * 所以任何滚动容器的位置每帧都会归零 —— 用户看到的就是
+ * 「聊天记录自己跳回顶部」。这是能直接感知的缺陷，必须处理。
+ *
+ * 按「可滚动元素的出现顺序」配对：重建后节点对象全换了，只能靠序号对应。
+ *
+ * ⚠️ 两条实测踩出来的规矩（别退回去）：
+ *   1. **声明了 data-auto-bottom 的容器，不管当前有没有溢出都要进快照。**
+ *      第一版只快照「已经能滚」的元素，于是「内容刚好撑出滚动条」那一次
+ *      快照是空的 → restoreScroll 直接 return → 新消息进来后停在顶部不动。
+ *      用户的原话就是「弹出新的文字后没有自动下滑」。
+ *   2. 快照里要存「重建前是否贴底」，而不是让调用方事后猜。
+ */
+function snapshotScroll() {
+  const out = []
+  if (!rootEl) {
+    return out
+  }
+  rootEl.querySelectorAll('*').forEach(function (el) {
+    const overflow = el.scrollHeight > el.clientHeight + 2
+    // 没溢出的 data-auto-bottom 容器也要记：它下一秒就可能因为新消息溢出
+    if (!overflow && !el.hasAttribute('data-auto-bottom')) {
+      return
+    }
+    out.push({
+      top: el.scrollTop,
+      // 没溢出时 gap 是负的，同样算「贴底」，这是新消息应当跟随的情形
+      atBottom: (el.scrollHeight - el.scrollTop - el.clientHeight) < 24
+    })
+  })
+  return out
+}
+
+function restoreScroll(snaps) {
+  if (!rootEl || !snaps.length) {
+    return
+  }
+  const now = []
+  rootEl.querySelectorAll('*').forEach(function (el) {
+    if (el.scrollHeight > el.clientHeight + 2 || el.hasAttribute('data-auto-bottom')) {
+      now.push(el)
+    }
+  })
+  for (let i = 0; i < snaps.length && i < now.length; i += 1) {
+    const s = snaps[i]
+    const el = now[i]
+    /*
+     * 声明了 data-auto-bottom 的容器（如会话记录 .chat）：
+     * 重建前若贴着底部，就继续贴底 —— 新消息自然跟随下滚；
+     * 用户主动往上翻时 atBottom 为 false，位置如实保留，不会被拽回去。
+     */
+    if (s.atBottom && el.hasAttribute('data-auto-bottom')) {
+      el.scrollTop = el.scrollHeight
+    } else {
+      el.scrollTop = s.top
+    }
+  }
+}
+
+function doRender() {
+  if (!tree || !data) {
+    return
+  }
+  const snaps = snapshotScroll()
+  const frag = document.createDocumentFragment()
+  tree.children.forEach(function (c) {
+    renderNode(c, data, { push: function (n) { frag.appendChild(n) } })
+  })
+  rootEl.textContent = ''
+  rootEl.appendChild(frag)
+  restoreScroll(snaps)
+}
+
+function go(uri) {
+  let key = null
+  Object.keys(PAGES).forEach(function (k) {
+    if (PAGES[k].path === uri) {
+      key = k
+    }
+  })
+  if (!key && uri) {
+    key = uri.replace(/^\//, '')
+    if (!PAGES[key]) {
+      key = null
+    }
+  }
+  if (key) {
+    build(key)
+  }
+}
+
+/* ---------------- 触屏行为加固 ---------------- */
+/*
+ * 触控屏上，长按会触发浏览器的右键菜单与文字选择；拖拽会选中
+ * 整页文字并出现蓝色高亮。CSS 的 user-select 已处理大部分，
+ * 这里再把默认行为与右键菜单显式拦掉，确保任何浏览器下都干净。
+ */
+document.addEventListener('contextmenu', function (e) { e.preventDefault() })
+document.addEventListener('selectstart', function (e) { e.preventDefault() })
+document.addEventListener('dragstart', function (e) { e.preventDefault() })
+
+/* 供自动化测试查询：确认上述拦截已生效 */
+window.__touchHardening = {
+  userSelect: function () { return getComputedStyle(document.body).webkitUserSelect || getComputedStyle(document.body).userSelect },
+  contextmenuBlocked: true
+}
+
+/* ---------------- 缩放 ---------------- */
+let fit = true
+// ?scale=1 固定为像素级 1:1（设计评审用）；默认铺满屏幕
+if (/[?&]scale=1/.test(String(location.search || ''))) {
+  fit = false
+}
+function resize() {
+  const stage = document.getElementById('stage')
+  /*
+   * 铺满目标屏幕时不保留任何边距，否则会留下黑边。
+   * 1:1 模式（?scale=1）才留一点呼吸空间，便于评审时看清边界。
+   */
+  const pad = fit ? 0 : 60
+  const availW = stage.clientWidth - pad
+  const availH = stage.clientHeight - pad
+  /*
+   * 缩放策略：**铺满目标屏幕**。
+   *
+   * 目标设备只有一种屏幕分辨率，界面应当铺满整屏、不留黑边，
+   * 所以默认按窗口等比放大/缩小到填满可视区域（只用单一缩放系数，
+   * 不会拉伸变形；多出的部分按 16:10 与屏幕比例差异居中留白）。
+   *
+   * 需要「像素级 1:1」评审时用 ?scale=1。
+   */
+  const scale = fit
+    ? Math.min(availW / DESIGN.width, availH / DESIGN.height)
+    : 1
+  /*
+   * 外框尺寸不写死：它只是给 #root 定位的容器，内容由 #root 的 transform 缩放。
+   * 若把外框固定成设计尺寸，在小于设计的窗口里会因 overflow:hidden
+   * 把缩放后的底部内容裁掉（表现为按钮点不到）。
+   */
+  frame.style.width = availW + 'px'
+  frame.style.height = availH + 'px'
+  frame.style.transform = 'scale(' + scale + ')'
+  // 用像素值固定「屏幕」尺寸，避免弹性子项把内容撑高
+  rootEl.style.width = DESIGN.width + 'px'
+  rootEl.style.height = DESIGN.height + 'px'
+  rootEl.style.maxHeight = DESIGN.height + 'px'
+  document.getElementById('btn-fit').classList.toggle('on', fit)
+  document.getElementById('btn-real').classList.toggle('on', !fit)
+}
+window.addEventListener('resize', resize)
+document.getElementById('btn-fit').onclick = function () { fit = true; resize() }
+document.getElementById('btn-real').onclick = function () { fit = false; resize() }
+
+/* ---------------- 页面切换按钮 ---------------- */
+const list = document.getElementById('pagelist')
+Object.keys(PAGES).forEach(function (k) {
+  const b = document.createElement('button')
+  b.textContent = k
+  b.dataset.page = k
+  b.onclick = function () { build(k) }
+  list.appendChild(b)
+})
+
+/**
+ * 启动页：优先用 URL hash（允许 ./start.sh --page voice 直接进入某个 app），
+ * 否则用 manifest 里声明的 entry。
+ *
+ * hash 里可能带多个标记，用逗号分隔，例如 start.sh 生成的 '#kiosk,voice'：
+ *   kiosk = 隐藏工具栏（看板模式），voice = 直接进入语音助手页。
+ * 所以必须按逗号分词逐个匹配，不能拿整串当页面名
+ * （早期版本就是拿 "kiosk,voice" 当页面名，匹配不到，导致 --page 静默失效）。
+ */
+function initialPage() {
+  const raw = decodeURIComponent(String(location.hash || '').replace(/^#/, '')).trim()
+  if (!raw) {
+    return 'Home'
+  }
+
+  const tokens = raw.split(',').map(function (s) { return s.trim() }).filter(Boolean)
+
+  // 逐个子串查找页面：支持 #voice（页面名）与 #/voice（路由路径）
+  for (let i = 0; i < tokens.length; i += 1) {
+    const t = tokens[i]
+    if (t === 'kiosk') {
+      continue
+    }
+    if (PAGES[t]) {
+      return t
+    }
+    let found = null
+    Object.keys(PAGES).forEach(function (k) {
+      if (PAGES[k].path === t || PAGES[k].path === '/' + t) {
+        found = k
+      }
+    })
+    if (found) {
+      return found
+    }
+  }
+
+  // 兜底：整串当页面名再试一次（兼容旧的单值写法）
+  if (PAGES[raw]) {
+    return raw
+  }
+  return 'Home'
+}
+
+build(initialPage())
+
+/**
+ * 看板模式：#kiosk 时隐藏顶部工具栏，让界面独占整屏。
+ * 触控屏正式部署时由 start.sh 带上该参数；开发调试时不带，保留切页按钮。
+ */
+if (String(location.hash).indexOf('kiosk') >= 0) {
+  document.body.classList.add('kiosk')
+}
+
+resize()
+window.__velaguard = {
+  build: build,
+  store: store,
+  source: source,
+  getData: function () { return data },
+  debugMeta: debugMeta,
+  /**
+   * 通过 Proxy 改数据（自动化测试专用）。
+   *
+   * ⚠️ 为什么不能直接改 getData() 拿到的东西：
+   *   getData() 返回的是**原始对象**，不是包着它的 Proxy。往它上面赋值
+   *   绕过了 set 陷阱 → 不会 queueRender → **数据变了但 DOM 不动**。
+   *   这个坑很隐蔽：测试断言「数据里有 19 条」会通过，界面上却还是 1 条，
+   *   于是「滚动没跳回顶部」之类的断言变成永远成立的空断言（实测踩过）。
+   *   要触发真实渲染，就用这里的 patch。
+   */
+  patch: function (obj) {
+    if (!dataProxy || !obj) {
+      return 'NO_PROXY'
+    }
+    Object.keys(obj).forEach(function (k) { dataProxy[k] = obj[k] })
+    return 'OK'
+  },
+  /** 切换数据源并重绘当前页面（供界面按钮与自动化测试使用） */
+  setSource: function (name) {
+    source.setMode(name)
+    if (data && typeof data.refresh === 'function') {
+      data.refresh()
+    }
+    return source.name
+  },
+  // 给自动化验证用：直接触发页面上的某个事件处理方法
+  act: function (name, tid) {
+    if (!data || typeof data[name] !== 'function') {
+      return 'NO_HANDLER:' + name
+    }
+    data[name]({ target: { attr: { tid: tid === undefined ? '' : tid }, data: {} } })
+    return 'OK'
+  }
+}
+</script>
+</body>
+</html>

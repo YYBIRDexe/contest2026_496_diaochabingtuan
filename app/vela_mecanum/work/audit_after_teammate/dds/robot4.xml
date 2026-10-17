@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 车队统一 DDS 配置：UDP 传输 + 四车单播初始对端。
+
+     两个已知环境问题一起解决：
+       1) 容器 /dev/shm 累积 200+ 个 fastrtps_* 段后，新起的节点收不到数据
+          —— 所以只用 UDP，不用共享内存传输；
+       2) 教室 AP 挡住无线客户端之间的组播（TCP 通、ping 不通、跨车 DDS
+          时好时坏）—— 所以显式写死四车的单播地址做发现，不依赖组播。
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>udp4_only</transport_id>
+      <type>UDPv4</type>
+      <sendBufferSize>1048576</sendBufferSize>
+      <receiveBufferSize>4194304</receiveBufferSize>
+    </transport_descriptor>
+  </transport_descriptors>
+
+  <participant profile_name="fleet_udp_unicast" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>udp4_only</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <builtin>
+        <initialPeersList>
+          <locator><udpv4><address>192.168.1.201</address></udpv4></locator>
+          <locator><udpv4><address>192.168.1.202</address></udpv4></locator>
+          <locator><udpv4><address>192.168.1.203</address></udpv4></locator>
+          <locator><udpv4><address>192.168.1.204</address></udpv4></locator>
+        </initialPeersList>
+      </builtin>
+    </rtps>
+  </participant>
+</profiles>
