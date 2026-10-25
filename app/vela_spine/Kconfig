@@ -2,5 +2,6 @@ config EXAMPLES_VELA_SPINE
 	tristate "Vela Spine scoring and allocation diagnostics"
 	default n
 	depends on NETUTILS_CJSON
+	depends on CRYPTO_MBEDTLS
 	help
 		Non-motion scoring CLI and allocation selftest for W1 acceptance.

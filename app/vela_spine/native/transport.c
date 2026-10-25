@@ -117,13 +117,16 @@ static int endpoint_address(const char *endpoint,struct sockaddr_in *addr)
 }
 int sp_http_endpoint_valid(const char *endpoint)
 { struct sockaddr_in addr;return endpoint_address(endpoint,&addr)==0; }
-int sp_http_post(const char *endpoint,const char *body,const char *notice_id)
+int sp_http_exchange(const char *endpoint,const char *method,const char *path,const char *body,char *out,size_t size)
 {
   char header[256],*response=NULL;struct sockaddr_in addr;
   int fd=-1,ret=-1,flags,error,n,framed=0;socklen_t elen=sizeof(error);
   size_t used=0,total=0,offset=0;int64_t deadline=now_ms();
-  if(!body||!notice_id||deadline<0||strlen(body)>8192||endpoint_address(endpoint,&addr))return -1;
-  n=snprintf(header,sizeof(header),"POST /incidents HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %lu\r\nConnection: close\r\n\r\n",endpoint,(unsigned long)strlen(body));
+  if(!body)body="";
+  if(!out||!size||!method||!path||deadline<0||strlen(body)>8192||endpoint_address(endpoint,&addr))return -1;
+  if(strcmp(method,"GET")&&strcmp(method,"POST"))return -1;
+  if(strcmp(path,"/incidents")&&strcmp(path,"/human-actions")&&strcmp(path,"/human-results"))return -1;
+  n=snprintf(header,sizeof(header),"%s %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %lu\r\nConnection: close\r\n\r\n",method,path,endpoint,(unsigned long)strlen(body));
   if(n<0||(size_t)n>=sizeof(header)) return -1;
   fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0) return -1;
   response=malloc(4097);if(!response) goto done;
@@ -143,9 +146,16 @@ int sp_http_post(const char *endpoint,const char *body,const char *notice_id)
     if(!framed) {framed=framing(response,used,&total,&offset);if(framed<0) goto done;}
     if(framed&&used>=total) {
       if(used!=total) goto done;
-      ret=ack_valid(response+offset,notice_id)?0:-1;break;
+      if(total-offset>=size)goto done;
+      memcpy(out,response+offset,total-offset);out[total-offset]=0;ret=0;break;
     }
   }
 done:
   close(fd);free(response);return ret;
+}
+int sp_http_post(const char *endpoint,const char *body,const char *notice_id)
+{
+  char ack[2049];
+  if(!notice_id||sp_http_exchange(endpoint,"POST","/incidents",body,ack,sizeof(ack)))return -1;
+  return ack_valid(ack,notice_id)?0:-1;
 }

@@ -1,6 +1,7 @@
 #include "store.h"
 #include "ingress.h"
 #include "transport.h"
+#include "human.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,7 +65,8 @@ static cJSON *load(const char *root)
     if(!cJSON_IsObject(row)||!cJSON_IsObject(get(row,"event"))||
        !cJSON_IsObject(get(row,"assessment"))||level(get(row,"assessment"))<0||
        !cJSON_IsBool(get(row,"pending"))||
-       (get(row,"delivered")&&!cJSON_IsBool(get(row,"delivered")))) goto done;
+       (get(row,"delivered")&&!cJSON_IsBool(get(row,"delivered")))||
+       !sp_human_record_valid(row)) goto done;
     raw=cJSON_PrintUnformatted(get(row,"event"));if(!raw) goto done;
     bad=sp_decode_event(raw,70,&canonical,&assessment);
     cJSON_free(raw);cJSON_free(canonical);cJSON_free(assessment);if(bad) goto done;
@@ -149,7 +151,7 @@ int sp_store_ingest(const char *root,const char *json)
       ret=emit(a,rev==prior?"DUPLICATE":"STALE_IGNORED",rev==prior,cJSON_IsTrue(get(old,"pending")),cJSON_IsTrue(get(old,"delivered")));
       goto done;
     }
-    oldlevel=level(get(old,"assessment"));
+    oldlevel=!strcmp(sp_human_state(old),"CLOSED")?0:level(get(old,"assessment"));
   } else if(cJSON_GetArraySize(records)>=CAPACITY) goto done;
   newlevel=level(a);if(newlevel<0) goto done;observed=newlevel;
   v=get(a,"decision");
@@ -168,6 +170,10 @@ int sp_store_ingest(const char *root,const char *json)
    if(!cJSON_AddItemToObject(record,"assessment",copy)){cJSON_Delete(copy);goto done;}}
   if(!cJSON_AddBoolToObject(record,"pending",newlevel>0)||
      !cJSON_AddBoolToObject(record,"delivered",0)) goto done;
+  if(old&&get(old,"human")) {
+    cJSON *previous=cJSON_Duplicate(get(old,"human"),1);
+    if(!previous||!cJSON_AddItemToObject(record,"previous_human",previous)){cJSON_Delete(previous);goto done;}
+  }
   if(newlevel>0) {
     cJSON *trigger=get(record,"event"),*previous=NULL,*copy;
     double trigger_score=get(a,"score")->valuedouble;
@@ -302,3 +308,70 @@ int sp_store_deliver(const char *root,const char *endpoint)
 { return deliver(root,endpoint,NULL); }
 int sp_store_delivery_step(const char *root,const char *endpoint,int *outcome)
 { return deliver(root,endpoint,outcome); }
+
+int sp_store_human_apply(const char *root,const cJSON *command,const char *payload,char **result)
+{
+  cJSON *records=NULL,*row=NULL,*r,*h=NULL,*history,*entry,*copy,*o=NULL,*p;
+  const char *status="STATE_REJECTED",*state="NOT_FOUND",*step=get(command,"step")->valuestring;
+  const char *id=get(command,"action_id")->valuestring,*eid=get(command,"event_id")->valuestring;
+  int fd=-1,ret=3,current=0,rev=get(command,"revision")->valueint;
+  *result=NULL;
+  fd=lock_store(root);if(fd<0)goto done;
+  records=load(root);if(!records)goto done;
+  cJSON_ArrayForEach(r,records)
+    if(!strcmp(get(get(r,"event"),"event_id")->valuestring,eid)){row=r;break;}
+  if(!row)goto response;
+  current=get(get(row,"event"),"revision")->valueint;state=sp_human_state(row);
+  if(current!=rev){status="STALE_REJECTED";goto response;}
+  cJSON_ArrayForEach(r,records) {
+    cJSON *entries=get(get(r,"human"),"actions");
+    cJSON_ArrayForEach(entry,entries) {
+      if(!strcmp(get(entry,"action_id")->valuestring,id)) {
+        status=r==row&&!strcmp(get(entry,"payload")->valuestring,payload)?"DUPLICATE":"STATE_REJECTED";
+        goto response;
+      }
+    }
+  }
+  if(!cJSON_IsTrue(get(row,"pending")))goto response;
+  if((!strcmp(step,"CLAIM")&&strcmp(state,"REQUIRED"))||
+     (!strcmp(step,"HANDLE")&&strcmp(state,"CLAIMED"))||
+     (!strcmp(step,"CLOSE")&&strcmp(state,"HANDLED")))goto response;
+  if(strcmp(step,"CLAIM")) {
+    p=get(get(row,"human"),"actor");
+    if(!cJSON_IsString(p)||strcmp(p->valuestring,get(command,"actor")->valuestring))goto response;
+  }
+  h=get(row,"human")?cJSON_Duplicate(get(row,"human"),1):cJSON_CreateObject();if(!h)goto done;
+  cJSON_DeleteItemFromObjectCaseSensitive(h,"state");
+  cJSON_DeleteItemFromObjectCaseSensitive(h,"actor");
+  cJSON_DeleteItemFromObjectCaseSensitive(h,"note");
+  cJSON_DeleteItemFromObjectCaseSensitive(h,"verified");
+  if(!cJSON_AddStringToObject(h,"state",!strcmp(step,"CLAIM")?"CLAIMED":!strcmp(step,"HANDLE")?"HANDLED":"CLOSED")||
+     !cJSON_AddStringToObject(h,"actor",get(command,"actor")->valuestring)||
+     !cJSON_AddStringToObject(h,"note",get(command,"note")->valuestring)||
+     !cJSON_AddBoolToObject(h,"verified",cJSON_IsTrue(get(command,"verified"))))goto done;
+  history=get(h,"actions");
+  if(!history){history=cJSON_AddArrayToObject(h,"actions");if(!history)goto done;}
+  entry=cJSON_CreateObject();if(!entry)goto done;
+  if(!cJSON_AddStringToObject(entry,"action_id",id)||!cJSON_AddStringToObject(entry,"payload",payload)||
+     !cJSON_AddItemToArray(history,entry)){cJSON_Delete(entry);goto done;}
+  if(get(row,"human")) {
+    if(!cJSON_ReplaceItemInObjectCaseSensitive(row,"human",h))goto done;
+  }else if(!cJSON_AddItemToObject(row,"human",h))goto done;
+  h=NULL;
+  if(!strcmp(step,"CLOSE")) {
+    copy=cJSON_CreateFalse();if(!copy)goto done;
+    if(!cJSON_ReplaceItemInObjectCaseSensitive(row,"pending",copy)){cJSON_Delete(copy);goto done;}
+  }
+  if(save(root,records))goto done;
+  status="APPLIED";state=sp_human_state(row);
+response:
+  o=cJSON_CreateObject();if(!o)goto done;
+  if(!cJSON_AddStringToObject(o,"action_id",id)||!cJSON_AddStringToObject(o,"event_id",eid)||
+     !cJSON_AddNumberToObject(o,"revision",rev)||!cJSON_AddNumberToObject(o,"current_revision",current)||
+     !cJSON_AddStringToObject(o,"status",status)||!cJSON_AddStringToObject(o,"human_state",state)||
+     !cJSON_AddBoolToObject(o,"pending",row&&cJSON_IsTrue(get(row,"pending"))))goto done;
+  *result=cJSON_PrintUnformatted(o);if(*result)ret=0;
+done:
+  if(fd>=0)close(fd);
+  cJSON_Delete(records);cJSON_Delete(h);cJSON_Delete(o);return ret;
+}

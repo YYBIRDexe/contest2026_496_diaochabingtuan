@@ -47,7 +47,8 @@ char *sp_query_context(const char *query,
     "本轮应用已通过官方read_file执行两次只读查询，以下为本轮返回。"
     "只依据本轮技能与快照回答，不沿用历史结果。先报告记录数及指定事件是否存在。"
     "来源标签不参与评分或锁存；current_decision不是动作。"
-    "delivered仅持久回执，pending待人工，回放非真实事故。\n"
+    "delivered仅持久回执。human.state是人工流程状态，pending表示尚未关闭，不代表未接单。"
+    "CLOSED表示该版本已人工复核关闭，assessment仍保留历史分级。回放非真实事故。\n"
     "<current_skill>\n%s\n</current_skill>\n"
     "<current_snapshot>\n%s\n</current_snapshot>\n用户查询：%s",skill,state,query);
 done:

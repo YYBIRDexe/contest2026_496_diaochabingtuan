@@ -180,10 +180,15 @@
 +#endif
 --- a/packages/ai_agent/src/llm/llm_proxy.c
 +++ b/packages/ai_agent/src/llm/llm_proxy.c
-@@ -897,6 +897,16 @@
+@@ -897,6 +897,21 @@
      /* XML fallback parsers for non-standard models */
      parse_xml_tool_calls(resp);
      parse_ns_xml_tool_calls(resp);
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++    /* CODEX_SPINE_READONLY_BRIDGE */
++    extern void parse_spine_readonly_tool_call(llm_response_t *resp);
++    parse_spine_readonly_tool_call(resp);
++#endif
 +#ifdef CONFIG_EXAMPLES_VELA_SPINE
 +    /* CODEX_SPINE_READONLY_BRIDGE */
 +    extern void parse_spine_readonly_tool_call(llm_response_t *resp);
@@ -229,3 +234,34 @@
  #ifdef CONFIG_LUNCHER_MINI_APP
  luncher_mini &
  #endif
+--- a/packages/ai_agent/src/tools/skill_loader.c
++++ b/packages/ai_agent/src/tools/skill_loader.c
+@@ -320,6 +320,7 @@
+ 
+ size_t skill_loader_build_summary(char *buf, size_t size)
+ {
++    if (!buf || !size) return 0;
+     /*
+      * On Vela/NuttX we have real directories, so we can simply opendir
+      * on the skills directory and iterate over .md files.
+@@ -369,9 +370,17 @@
+         fclose(f);
+ 
+         /* Append to summary */
+-        off += snprintf(buf + off, size - off,
+-            "- **%s**: %s (read with: read_file %s)\n",
+-            title, desc, full_path);
++        /* CODEX_SPINE_UTF8_SUMMARY */
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++        extern size_t sp_skill_summary_append(char *,size_t,size_t,const char *,const char *,const char *);
++        off = sp_skill_summary_append(buf, size, off, title, desc, full_path);
++#else
++        int written = snprintf(buf + off, size - off,
++            "- **%s**: %s (read with: read_file %s)\n", title, desc, full_path);
++        if (written < 0) break;
++        off += (size_t)written < size - off ? (size_t)written : size - off - 1;
++#endif
++        if (size - off < 4) break;
+     }
+ 
+     closedir(dir);

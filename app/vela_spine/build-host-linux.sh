@@ -7,7 +7,9 @@ test -f "$cjson_dir/cJSON.c"
 mkdir -p build
 cc="${CC:-gcc}"
 flags=(-std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -O2 -I"$cjson_dir")
-sources=(spine_main.c native/spine.c native/ingress.c native/store.c native/transport.c native/watch.c)
+mbedtls_dir="$(realpath -- "$cjson_dir/../../../crypto/mbedtls/mbedtls")"
+flags+=(-I"$mbedtls_dir/include" -I"$PWD/host" '-DMBEDTLS_CONFIG_FILE="spine_mbedtls_config.h"')
+sources=(spine_main.c native/spine.c native/ingress.c native/store.c native/transport.c native/watch.c native/human.c "$mbedtls_dir/library/md.c" "$mbedtls_dir/library/sha256.c" "$mbedtls_dir/library/platform_util.c")
 "$cc" "${flags[@]}" -shared -fPIC native/spine.c -o build/libspine.so
 "$cc" "${flags[@]}" "${sources[@]}" "$cjson_dir/cJSON.c" -lm -o build/spine-cli
 "$cc" "${flags[@]}" "${sources[@]}" tests/fsync_fault.c "$cjson_dir/cJSON.c" -Wl,--wrap=fsync -lm -o build/spine-cli-fault

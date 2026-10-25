@@ -1,0 +1,2 @@
+# Unified-diff blank context lines intentionally contain one prefix space.
+agent_adapter/*.patch whitespace=-blank-at-eol

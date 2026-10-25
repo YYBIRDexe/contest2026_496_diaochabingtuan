@@ -1,6 +1,8 @@
 # Vela Spine — W0/W1/W2 development increment
 
-当前实现（2026-10-25）：真实Gemini已部署原生C紧急度评分、事件持久化、版本去重、人工状态锁存及HTTP持久回执；默认S1/S2/S3三车，分配器容量仍支持4车扩展。单实例自动投递worker及按配置开机启动已实测。官方ai_agent集成只读查询预处理：每次刷新技能和状态再由真实DeepSeek解释，新事件92分到20分连续更新验收通过。以下10/22章节为历史检查点，不能当成当前阻塞。无运动命令或双车对齐功能。
+人工处理协议与部署说明见 [host/HUMAN-PROTOCOL.md](host/HUMAN-PROTOCOL.md)。
+
+当前实现（2026-10-25）：真实Gemini已部署评分、事件持久化、版本去重、高风险锁存及自动投递。新增版本绑定的人工接单→提交处理结果→复核关闭，平台排队后须等板端保存确认才生效，旧版本关闭不能清除新告警。独立人工页面已在真实平台/板端通过浏览器联调，仍未并入8130生产界面。官方ai_agent每次只读刷新状态再由真实DeepSeek解释。默认S1/S2/S3三车，分配器容量4仅为扩展。以下历史章节以当时检查点为准，人工新能力见文末及host/HUMAN-PROTOCOL.md。没有车辆运动命令。
 
 ## 最新需求
 
@@ -84,6 +86,8 @@ Ubuntu SSH已恢复；Windows和Ubuntu各14测试通过，新增接收页后Wind
 
 ## 原生可靠投递与常驻服务（2026-10-25）
 
+本节是人工流程接入前的投递检查点；人工操作能力已由文末章节扩展。
+
 - 单次投递：vela_spine --deliver ROOT PRIVATE_IPV4:PORT。严格匹配HTTP200、Content-Length、notification_id及persisted=true；平台存储回执与人工处理分开。
 - 前台worker：vela_spine --watch ROOT PRIVATE_IPV4:PORT [cycles]。不传cycles持续运行；失败2/4/8/16/32/60秒退避，空闲2秒检查，单实例fcntl锁，网络等待期间释放事件库锁，存储损坏退出，锁忙可重试。每次启动最多128条状态日志。
 - 板端服务：vela_spine --service。固定业务目录/data/ai_agent/sp，endpoint.txt保存私网IPv4:port；存在该配置时Gemini独立配置的启动脚本自动拉起。移除endpoint.txt可禁用下次开机启动；停止当前进程应按ps中确切PID终止。
@@ -92,10 +96,18 @@ Ubuntu SSH已恢复；Windows和Ubuntu各14测试通过，新增接收页后Wind
 
 agent_adapter保存固定只读状态文件的JSON/XML、观察到的DSML文本适配；仅转换read_file到/data/ai_agent/sp/state.json，其他工具和路径不适配。官方read_file本身继续检查目录权限，原生服务目录被write_file/edit_file保留路径保护。此适配没有使整个官方Agent成为安全沙箱。agent_adapter/official-agent-and-boot.patch及安装器用于复现独立Gemini配置修改；不适用于直接刷其他板型。
 
-主机原生C及原有Python测试共43项通过；板端结果和失败尝试分别留在工作区设备验收/自动投递-20261025，不能只凭主机结果宣称烧录与运行成功。
+该阶段主机原生C及Python测试43项通过；人工及UTF8增量后的完整回归为59项。板端结果和失败尝试分别留在工作区设备验收目录，不能只凭主机结果宣称烧录与运行成功。
 
-Linux一键复现：`bash build-host-linux.sh /path/to/openvela/apps/netutils/cjson/cJSON`。构建实际C核心、CLI、fsync故障注入及只读适配库，再执行43项测试；Windows脚本仅覆盖便携评分/分配库。
+Linux一键复现：`bash build-host-linux.sh /path/to/openvela/apps/netutils/cjson/cJSON`。使用同一源码树的mbedTLS构建实际C核心、CLI、fsync故障注入及只读适配库，再执行59项测试；Windows脚本仅覆盖便携评分/分配库。
 
 Agent查询部署还需安装`agent_adapter/spine-status.md`至板端技能目录，并在Linux ADB主机运行`python3 agent_adapter/install_context.py --backup-dir /私有目录`。该脚本保留既有USER.md，将项目查询约定幂等加入官方用户上下文，原文备份不进入仓库。仅放置技能或上下文约定不足以保证每次刷新，曾发生旧历史被误称为当前读取结果。因此query_context.c在匹配巡检/脊椎查询或`ask /spine`时，先调用官方read_file读取两个固定文件，校验快照schema/CRC，每次构造仅含本轮数据的LLM消息并禁用该次解释的后续工具。读取失败、技能达到4KiB或快照达到32KiB时拒绝解释；原生库64KiB容量与查询32KiB上限不同。一般对话不走该分支。模型文本仍只用于解释，原生C决定评分、锁存和投递。
 
-当前板端service6镜像SHA256：`9ad369b86b74d137eb2426d95decd2e22f9887d5058add7a62e068be2a5bf960`。真实烧录100%与三分区CRC匹配，正常软件重启后单worker及四条回放状态保留通过。两次查询实际读取3111/3099字节快照，真实LLM分别2135/2306ms；首次请求期间墙上时间从1970跳至2026而单调耗时正常，不代表RTC日期已校准。新事件rev1/2在实体平台独立SQLite核对92/20分及历史92锁存。全量重装后的配置和状态由私有备份显式恢复，随后才进行普通重启验收。
+历史service6镜像SHA256：`9ad369b86b74d137eb2426d95decd2e22f9887d5058add7a62e068be2a5bf960`。真实烧录100%与三分区CRC匹配，正常软件重启后单worker及四条回放状态保留通过。两次查询实际读取3111/3099字节快照，真实LLM分别2135/2306ms；首次请求期间墙上时间从1970跳至2026而单调耗时正常，不代表RTC日期已校准。新事件rev1/2在实体平台独立SQLite核对92/20分及历史92锁存。全量重装后的配置和状态由私有备份显式恢复，随后才进行普通重启验收。
+
+## 人工接单、处理与复核关闭（2026-10-25）
+
+独立人工页面已与真实Gemini完成回放联调。平台持久排队，原生服务验签、精确版本/接单人/顺序检查并保存后回签，平台才显示CLAIMED/HANDLED/CLOSED。重复请求不重复生效，旧关闭不影响新版。CLOSED后pending=false但保留历史分级；新高风险版本重新请求人工。
+
+最终human2镜像SHA256：2f1f879b460801b12b3e5a60d06fcd2cc434baf73b26d68ed10bda1ebfe2618b。59项主机测试通过，真实浏览器三步操作、正常重启保留、原始签名旧关闭重放拒绝、实体平台SQLite独立查询及DeepSeek关闭状态解释通过。官方技能摘要追加已修复长度越界和中文截断，真板长技能压力下摘要1023B且LLM成功。
+
+配置与信任边界见host/HUMAN-PROTOCOL.md。人工入口独立于8130生产界面；仍为受控回放和PC转发，没有车辆执行、动态路线或多用户权限。全量重装使用显式私有恢复，普通软件重启持久化已验证。AI Coding与源码提交走既有校验上传流程。

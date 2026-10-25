@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 # Preserve pristine sources before any of the idempotent edits below.
 source=Path('/home/ggbird/openvela/packages/ai_agent/src')
-for rel in ['llm/llm_parse.c','llm/llm_proxy.c','core/agent_loop.c','tools/tool_files.c']:
+for rel in ['llm/llm_parse.c','llm/llm_proxy.c','core/agent_loop.c','tools/tool_files.c','tools/skill_loader.c']:
  original=source/rel
  backup=original.with_name(original.name+'.codex-pre-spine-readonly')
  if not backup.exists():shutil.copy2(original,backup)
@@ -33,6 +33,28 @@ void parse_spine_readonly_tool_call(llm_response_t *resp)
 }
 #endif
 '''
+ p.write_text(s)
+# Bound snprintf's actual output and keep all summary fields valid UTF-8.
+p=source/'tools/skill_loader.c';s=p.read_text();marker='/* CODEX_SPINE_UTF8_SUMMARY */'
+if marker not in s:
+ anchor='size_t skill_loader_build_summary(char *buf, size_t size)\n{'
+ assert s.count(anchor)==1
+ s=s.replace(anchor,anchor+'\n    if (!buf || !size) return 0;')
+ anchor='''        off += snprintf(buf + off, size - off,
+            "- **%s**: %s (read with: read_file %s)\\n",
+            title, desc, full_path);'''
+ assert s.count(anchor)==1
+ s=s.replace(anchor,'''        /* CODEX_SPINE_UTF8_SUMMARY */
+#ifdef CONFIG_EXAMPLES_VELA_SPINE
+        extern size_t sp_skill_summary_append(char *,size_t,size_t,const char *,const char *,const char *);
+        off = sp_skill_summary_append(buf, size, off, title, desc, full_path);
+#else
+        int written = snprintf(buf + off, size - off,
+            "- **%s**: %s (read with: read_file %s)\\n", title, desc, full_path);
+        if (written < 0) break;
+        off += (size_t)written < size - off ? (size_t)written : size - off - 1;
+#endif
+        if (size - off < 4) break;''')
  p.write_text(s)
 # Refresh domain queries before the LLM, without stale conversation history.
 p=Path('/home/ggbird/openvela/packages/ai_agent/src/core/agent_loop.c')

@@ -2,6 +2,7 @@
 #include "native/ingress.h"
 #include "native/store.h"
 #include "native/watch.h"
+#include "native/human.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,12 +30,16 @@ int main(int argc, char **argv)
     return sp_watch(argv[2],argv[3],(unsigned)cycles);
   }
   if((argc==3 && !strcmp(argv[1],"--event")) ||
-     (argc==4 && !strcmp(argv[1],"--ingest"))) {
+     (argc==4 && (!strcmp(argv[1],"--ingest")||!strcmp(argv[1],"--human")))) {
     char buf[4098]; size_t n; FILE *fp=fopen(argv[2],"rb");
     if(!fp) return 2;
     n=fread(buf,1,sizeof(buf)-1,fp);
     if(ferror(fp)||n>4096||!feof(fp)||memchr(buf,0,n)) { fclose(fp);return 2; }
     fclose(fp);buf[n]=0;
+    if(!strcmp(argv[1],"--human")) {
+      char *reply=NULL;int code=sp_human_apply_signed(argv[3],buf,&reply);
+      if(reply){puts(reply);cJSON_free(reply);}return code;
+    }
     return argc==4?sp_store_ingest(argv[3],buf):sp_ingest_json(buf,70);
   }
   if (argc==2 && !strcmp(argv[1],"--selftest")) {
