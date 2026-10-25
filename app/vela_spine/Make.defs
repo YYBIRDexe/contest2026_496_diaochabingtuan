@@ -1,0 +1,3 @@
+ifneq ($(CONFIG_EXAMPLES_VELA_SPINE),)
+CONFIGURED_APPS += $(APPDIR)/examples/vela_spine
+endif

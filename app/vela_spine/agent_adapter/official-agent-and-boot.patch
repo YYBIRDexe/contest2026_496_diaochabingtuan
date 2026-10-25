@@ -1,0 +1,231 @@
+--- a/packages/ai_agent/src/core/agent_loop.c
++++ b/packages/ai_agent/src/core/agent_loop.c
+@@ -43,6 +43,7 @@
+ #include <string.h>
+ #include <strings.h>
+ #include <sys/time.h>
++#include <time.h>
+ 
+ #include "cJSON.h"
+ 
+@@ -64,6 +65,18 @@
+     "请求超时，LLM 响应时间过长。请稍后重试，或尝试简化你的问题。"
+ #define LLM_TIMEOUT_TASK_COMPLETE_MSG \
+     "任务已完成，但生成确认消息超时。"
++
++/* CODEX_SPINE_MONOTONIC_DURATION */
++static void agent_measure_time(struct timeval *tv)
++{
++    struct timespec ts;
++    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
++        tv->tv_sec = ts.tv_sec;
++        tv->tv_usec = ts.tv_nsec / 1000;
++    } else {
++        gettimeofday(tv, NULL);
++    }
++}
+ 
+ /* ── Clock-safe elapsed time calculation ───────────────────── */
+ 
+@@ -820,9 +833,9 @@
+     llm_response_t resp;
+     char* result = NULL;
+     struct timeval t0, t1;
+-    gettimeofday(&t0, NULL);
++    agent_measure_time(&t0);
+     int err = llm_chat_tools(system_prompt, messages, NULL, &resp);
+-    gettimeofday(&t1, NULL);
++    agent_measure_time(&t1);
+     uint32_t ms = calc_elapsed_ms(&t0, &t1);
+     bool timed_out = llm_call_timed_out(ms);
+ 
+@@ -990,9 +1003,9 @@
+     llm_response_t final_resp;
+     char* result = NULL;
+     struct timeval t0, t1;
+-    gettimeofday(&t0, NULL);
++    agent_measure_time(&t0);
+     int err = llm_chat_tools(sys_prompt, messages, NULL, &final_resp);
+-    gettimeofday(&t1, NULL);
++    agent_measure_time(&t1);
+     uint32_t ms = calc_elapsed_ms(&t0, &t1);
+     bool timed_out = llm_call_timed_out(ms);
+ 
+@@ -1065,9 +1078,9 @@
+ 
+         llm_response_t resp;
+         struct timeval tv_start, tv_end;
+-        gettimeofday(&tv_start, NULL);
++        agent_measure_time(&tv_start);
+         int err = llm_chat_tools(sys_prompt, messages, tools_json, &resp);
+-        gettimeofday(&tv_end, NULL);
++        agent_measure_time(&tv_end);
+         uint32_t latency_ms = calc_elapsed_ms(&tv_start, &tv_end);
+ 
+         /* Router failover: on LLM call failure, try next backend */
+@@ -1083,10 +1096,10 @@
+                 router_idx = next_idx;
+                 trace.backend_idx = next_idx;
+                 llm_response_free(&resp);
+-                gettimeofday(&tv_start, NULL);
++                agent_measure_time(&tv_start);
+                 err = llm_chat_tools(sys_prompt, messages,
+                     tools_json, &resp);
+-                gettimeofday(&tv_end, NULL);
++                agent_measure_time(&tv_end);
+                 latency_ms = calc_elapsed_ms(&tv_start, &tv_end);
+             }
+         }
+@@ -1183,10 +1196,10 @@
+                     router_idx = prem_idx;
+                     trace.backend_idx = prem_idx;
+ 
+-                    gettimeofday(&tv_start, NULL);
++                    agent_measure_time(&tv_start);
+                     err = llm_chat_tools(sys_prompt, messages,
+                         tools_json, &resp);
+-                    gettimeofday(&tv_end, NULL);
++                    agent_measure_time(&tv_end);
+                     latency_ms = calc_elapsed_ms(&tv_start, &tv_end);
+ 
+                     /* Watchdog check on cascade retry */
+@@ -1293,6 +1306,13 @@
+                                 strlen(AGENT_SKILLS_DIR)) == 0) {
+                             is_skill_read = true;
+                         }
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++                        /* CODEX_SPINE_STATUS_CONTEXT */
++                        if (cJSON_IsString(path_obj) && strcmp(path_obj->valuestring,
++                                "/data/ai_agent/sp/state.json") == 0) {
++                            is_skill_read = true;
++                        }
++#endif
+                         cJSON_Delete(input_obj);
+                     }
+                 }
+@@ -1540,8 +1560,35 @@
+         free(tools_json);
+         tools_json = tool_registry_get_tools_json();
+ 
+-        cJSON* messages = build_messages(msg.chat_id, msg.content,
+-            history_json, hist_size);
++        /* CODEX_SPINE_FRESH_QUERY */
++        bool spine_query = false;
++        cJSON* messages = NULL;
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++        extern int sp_query_matches(const char *text);
++        extern char *sp_query_context(const char *text,
++            int (*execute)(const char *,const char *,char *,size_t));
++        spine_query = sp_query_matches(msg.content);
++        if (spine_query) {
++            char *fresh = sp_query_context(msg.content, tool_registry_execute);
++            if (!fresh) {
++                dispatch_response(&msg, strdup("无法确认：本轮只读技能或告警快照读取/校验失败。"));
++                free(msg.image_b64);
++                free(msg.content);
++                continue;
++            }
++            messages = cJSON_CreateArray();
++            cJSON *current = cJSON_CreateObject();
++            cJSON_AddStringToObject(current, "role", "user");
++            cJSON_AddStringToObject(current, "content", fresh);
++            cJSON_AddItemToArray(messages, current);
++            free(fresh);
++            syslog(LOG_INFO, "[spine] fresh readonly query; conversation history omitted\n");
++        }
++#endif
++        if (!messages) {
++            messages = build_messages(msg.chat_id, msg.content,
++                history_json, hist_size);
++        }
+ 
+         char* final_text = NULL;
+ 
+@@ -1553,7 +1600,7 @@
+             /* ReAct loop */
+             s_llm_path_count++;
+             final_text = run_react_loop(sys_prompt, messages,
+-                tools_json, tool_output, tool_size, &msg);
++                spine_query ? NULL : tools_json, tool_output, tool_size, &msg);
+             cJSON_Delete(messages);
+         }
+ 
+--- a/packages/ai_agent/src/llm/llm_parse.c
++++ b/packages/ai_agent/src/llm/llm_parse.c
+@@ -452,3 +452,25 @@
+     resp->call_count = 0;
+     resp->tool_use = false;
+ }
++
++/* CODEX_SPINE_READONLY_BRIDGE */
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++extern char *sp_parse_readonly_call(const char *text);
++void parse_spine_readonly_tool_call(llm_response_t *resp)
++{
++    char *args;
++    if (!resp || resp->call_count || !resp->text) return;
++    args = sp_parse_readonly_call(resp->text);
++    if (!args) return;
++    snprintf(resp->calls[0].id, sizeof(resp->calls[0].id), "spine_read_0");
++    snprintf(resp->calls[0].name, sizeof(resp->calls[0].name), "read_file");
++    resp->calls[0].input = args;
++    resp->calls[0].input_len = strlen(args);
++    resp->call_count = 1;
++    resp->tool_use = true;
++    free(resp->text);
++    resp->text = NULL;
++    resp->text_len = 0;
++    syslog(LOG_INFO, "[spine] readonly format bridge accepted fixed status view\n");
++}
++#endif
+--- a/packages/ai_agent/src/llm/llm_proxy.c
++++ b/packages/ai_agent/src/llm/llm_proxy.c
+@@ -897,6 +897,16 @@
+     /* XML fallback parsers for non-standard models */
+     parse_xml_tool_calls(resp);
+     parse_ns_xml_tool_calls(resp);
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++    /* CODEX_SPINE_READONLY_BRIDGE */
++    extern void parse_spine_readonly_tool_call(llm_response_t *resp);
++    parse_spine_readonly_tool_call(resp);
++#endif
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++    /* CODEX_SPINE_READONLY_BRIDGE */
++    extern void parse_spine_readonly_tool_call(llm_response_t *resp);
++    parse_spine_readonly_tool_call(resp);
++#endif
+ 
+     cJSON_Delete(root);
+ 
+--- a/packages/ai_agent/src/tools/tool_files.c
++++ b/packages/ai_agent/src/tools/tool_files.c
+@@ -100,6 +100,12 @@
+         check = resolved;
+     }
+ 
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++    /* CODEX_SPINE_RESERVED_FILES */
++    extern int sp_agent_path_reserved(const char *path);
++    if (sp_agent_path_reserved(path) || sp_agent_path_reserved(check)) return true;
++#endif
++
+     for (int i = 0; s_protected_files[i]; i++) {
+         if (strcmp(check, s_protected_files[i]) == 0) {
+             return true;
+--- a/vendor/allwinnertech/boards/r528/r528s3-gemini-s1/src/etc/init.d/rcS.nsh
++++ b/vendor/allwinnertech/boards/r528/r528s3-gemini-s1/src/etc/init.d/rcS.nsh
+@@ -88,6 +88,14 @@
+   sh /etc/wifi/start_wifi.sh > /data/wifi-start.log &
+ fi
+ 
++/* CODEX_SPINE_SERVICE */
++#ifdef CONFIG_EXAMPLES_VELA_SPINE
++if [ -f /data/ai_agent/sp/endpoint.txt ]
++then
++  vela_spine --service > /data/spine-watch.log &
++fi
++#endif
++
+ #ifdef CONFIG_LUNCHER_MINI_APP
+ luncher_mini &
+ #endif
