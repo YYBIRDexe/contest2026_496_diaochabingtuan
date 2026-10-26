@@ -375,3 +375,24 @@ done:
   if(fd>=0)close(fd);
   cJSON_Delete(records);cJSON_Delete(h);cJSON_Delete(o);return ret;
 }
+
+/* Highest unresolved escalation level recorded for one tag. Only a human CLOSE
+   clears an entry, so a hold survives unrelated traffic. */
+int sp_store_tag_risk(const char *root,const char *tag_id,int *out)
+{
+  int fd,ret=3,worst=0;cJSON *records=NULL,*row,*event;const char *t;
+  if(!out||!tag_id)return 3;
+  *out=0;
+  fd=lock_store(root);if(fd<0)return 3;
+  records=load(root);if(!records){close(fd);return 3;}
+  cJSON_ArrayForEach(row,records){
+    event=get(row,"event");
+    t=get(event,"tag_id")?get(event,"tag_id")->valuestring:NULL;
+    if(!t||strcmp(t,tag_id))continue;
+    if(!cJSON_IsTrue(get(row,"pending")))continue;
+    {int l=level(get(row,"assessment"));if(l>worst)worst=l;}
+  }
+  *out=worst;ret=0;
+  close(fd);cJSON_Delete(records);
+  return ret;
+}

@@ -10,4 +10,6 @@ enum sp_delivery_outcome { SP_SENT, SP_EMPTY, SP_SUPERSEDED };
 int sp_store_delivery_step(const char *root,const char *endpoint,int *outcome);
 /* Internal: caller has verified the controller MAC and strict command schema. */
 int sp_store_human_apply(const char *root,const cJSON *command,const char *payload,char **result);
+/* Highest unresolved escalation level for one tag: 0 none, 1 review, 2 immediate. */
+int sp_store_tag_risk(const char *root,const char *tag_id,int *out);
 #endif

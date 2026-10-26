@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 from pathlib import Path
 import re
 import secrets
@@ -23,7 +24,7 @@ class OperatorHTTP(unittest.TestCase):
         self.token = re.search("const csrf='([^']+)'", self.html)[1]
         obj = dict(notification_id='http-event:1', event=dict(event_id='http-event',revision=1,robot_id='S1',tag_id='D_TAG_1',mode='replay'),
                    assessment=dict(score=92,decision='IMMEDIATE_HUMAN'),human_status='REQUIRED',escalation_score=92,source='HOST_NATIVE_C_TRANSPORT_TEST')
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute('INSERT INTO incidents VALUES(?,?)', ('http-event:1',json.dumps(obj)))
     def tearDown(self):
         self.server.shutdown();self.server.server_close();self.thread.join();self.tmp.cleanup()
@@ -35,7 +36,8 @@ class OperatorHTTP(unittest.TestCase):
         request=Request(self.base+'/actions',json.dumps(body).encode(),h)
         try:
             with urlopen(request,timeout=3) as r:return r.status,json.load(r)
-        except HTTPError as r:return r.code,json.load(r)
+        except HTTPError as r:
+            with r:return r.code,json.load(r)
     def test_browser_session_and_version_checks(self):
         self.assertEqual(self.post(headers={'X-Spine-Operator':'bad'})[0],403)
         self.assertEqual(self.post(headers={'Origin':'https://unrelated.example'})[0],403)

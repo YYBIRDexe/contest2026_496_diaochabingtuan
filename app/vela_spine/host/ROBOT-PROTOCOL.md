@@ -1,0 +1,53 @@
+# 三车网络模拟协议 v2
+
+2026-10-26：端侧任务接口的主机参考实现，v2 在 v1 上加入执行器停止动作与 STOP_CONFIRMED 终态，用于配合 Gemini 原生 C 任务账本（`native/task.c`）。仅监听 127.0.0.1，没有身份认证、真实导航或板端接入。所有输入必须 `mode=simulation`，ACK 只代表 PC SQLite 提交；禁止据此显示真车完成。S1 左岸、S2 右岸、S3 机房是默认展示角色，协议不把区域硬编码为可达性证明。
+
+## 运行
+
+在 app/vela_spine 目录运行：
+
+```sh
+python -m host.robot_simulator --database var/robots.sqlite3 --port 18140
+python -m host.robot_network_demo --output var/robot-network-new-run
+python -m unittest discover -s tests -p test_robot_simulator.py -v
+```
+
+数据库父目录需存在；demo 必须使用全新目录，自动关闭服务并保存数据库和逐条 HTTP 请求/应答 report.json。可用 `--offline S2` 模拟整次服务期间该车不可达；测试在运行中注入 503 和恢复。服务与 8130/8132/8133 无关联。
+
+## HTTP 和消息
+
+POST /v1/commands，JSON 最多 4096 字节，拒绝重复键、未知字段及非法值。GET /v1/state 读取当前状态。三辆逻辑车共享一个测试端点，并非三个真实车端进程。
+
+分配：
+
+```json
+{"schema":"spine-robot-sim-v1","mode":"simulation","command_id":"assign-S1-1","robot_id":"S1","task_id":"inspect-D1","revision":1,"action":"ASSIGN","tag_id":"D1"}
+```
+
+执行回报由测试驱动显式注入，不自动把时间流逝视为到点：
+
+```json
+{"schema":"spine-robot-sim-v1","mode":"simulation","command_id":"run-S1-1","robot_id":"S1","task_id":"inspect-D1","revision":1,"action":"REPORT","state":"RUNNING","sequence":1}
+```
+
+停止请求（v2 新增）：指挥端发出 STOP，执行器必须实际确认停止后才回 STOP_CONFIRMED：
+
+```json
+{"schema":"spine-robot-sim-v1","mode":"simulation","command_id":"stop-inspect-D1-1","robot_id":"S1","task_id":"inspect-D1","revision":1,"action":"STOP"}
+```
+
+STOP 的应答是任务快照 `state=STOP_CONFIRMED`、`sequence` 已加 1；STOP 不可重复用于终态任务，车辆/版本不符 409。
+
+ACCEPTED→RUNNING→COMPLETED；RUNNING 可进入 BLOCKED，BLOCKED 只能恢复 RUNNING 或终止 FAILED/CANCELLED。ACCEPTED 也允许 FAILED/CANCELLED。`STOP_CONFIRMED` 是 v2 的第四个终态，只能由 STOP 动作进入，不能由 REPORT 伪造。终态不再接收任何转换。sequence 必须逐次加 1，错序拒绝后由发送方补齐，不能跳过回执。CANCELLED 是模拟执行器确认已取消，不是指挥端仅发出取消请求。
+
+HTTP200 返回 persisted=true、ack_scope=SIMULATOR_STORAGE_ONLY、motion=false 及命令生效时的任务快照。相同 command_id 和正文重试返回原应答；历史 ACK 不是实时状态，要查询 /state。同 ID 不同正文 409；业务冲突 409 且 persisted=false；注入离线或存储失败 503，不得当完成或释放任务。SQLite 事务提交后才允许发 ACK。
+
+task_id 全局唯一，首次 revision=1；仅终态允许下一版本（严格+1）再分配。非终态任务只有一个 robot_id，单车同时最多一个非终态任务（STOP_CONFIRMED 也释放车辆）。旧版本/错误车辆回报不能更新新版。数据库重开保留命令去重和任务，离线注入属于测试配置，不保存为业务状态。
+
+## 与板端账本的关系
+
+`native/task.c`（主机可编译、板端待部署）通过本协议派单与收账：POST /v1/commands 的 ASSIGN/STOP、GET /v1/state 的实时状态。板端只在收到 `persisted=true` 且 `state=ACCEPTED` 后才把任务记为 DISPATCHED，ACCEPTED 不是完成；收到 STOP_CONFIRMED 才把任务记为停止完成并释放归属。协议细节与账本状态机见 `BOARD-TASK-PROTOCOL.md`。
+
+## 边界与下一步
+
+本轮只验证网络协议、模拟器与主机版 C 账本。尚未在真板部署账本，也没有设备认证、心跳超时、租约、区域禁入和车端安全停车；真实车端接入还须设备身份、独立连接、新鲜度和物理执行验证。断线保留归属，不能凭超时自动改派。SQLite 命令历史目前不清理，仅用于有限验收回放；长期服务需要容量策略。

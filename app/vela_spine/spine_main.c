@@ -3,6 +3,8 @@
 #include "native/store.h"
 #include "native/watch.h"
 #include "native/human.h"
+#include "native/task.h"
+#include "agent_adapter/task_tools.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,13 +31,39 @@ int main(int argc, char **argv)
     if(argc==5 && parse(argv[4],1,10000,&cycles)) return 2;
     return sp_watch(argv[2],argv[3],(unsigned)cycles);
   }
+  if(argc==4 && (!strcmp(argv[1],"--task-dispatch")||!strcmp(argv[1],"--task-poll")||
+                 !strcmp(argv[1],"--task-stop-sync"))) {
+    char *reply=NULL;int code;
+    code=!strcmp(argv[1],"--task-dispatch")?sp_task_dispatch(argv[2],argv[3],&reply):
+         !strcmp(argv[1],"--task-poll")?sp_task_poll(argv[2],argv[3],&reply):
+         sp_task_stop_sync(argv[2],argv[3],&reply);
+    if(reply){puts(reply);cJSON_free(reply);}return code;
+  }
+  if((argc==3 || argc==4) && !strcmp(argv[1],"--task-view")) {
+    char *reply=NULL;int code=sp_task_view(argv[2],argc==4?argv[3]:NULL,&reply);
+    if(reply){puts(reply);cJSON_free(reply);}return code;
+  }
+  if((argc==4 || argc==5) && !strcmp(argv[1],"--task-stop")) {
+    char *reply=NULL;int code=sp_task_stop(argv[2],argv[3],argc==5?argv[4]:"",&reply);
+    if(reply){puts(reply);cJSON_free(reply);}return code;
+  }
+  if((argc==5 || argc==6) && !strcmp(argv[1],"--task-tool")) {
+    char *reply=NULL;
+    int code=sp_task_tool_call(argv[2],argc==6?argv[5]:NULL,argv[3],argv[4],&reply);
+    if(reply){puts(reply);cJSON_free(reply);}return code;
+  }
   if((argc==3 && !strcmp(argv[1],"--event")) ||
-     (argc==4 && (!strcmp(argv[1],"--ingest")||!strcmp(argv[1],"--human")))) {
+     (argc==4 && (!strcmp(argv[1],"--ingest")||!strcmp(argv[1],"--human")||
+                  !strcmp(argv[1],"--task-plan")))) {
     char buf[4098]; size_t n; FILE *fp=fopen(argv[2],"rb");
     if(!fp) return 2;
     n=fread(buf,1,sizeof(buf)-1,fp);
     if(ferror(fp)||n>4096||!feof(fp)||memchr(buf,0,n)) { fclose(fp);return 2; }
     fclose(fp);buf[n]=0;
+    if(!strcmp(argv[1],"--task-plan")) {
+      char *reply=NULL;int code=sp_task_plan_apply(argv[3],buf,&reply);
+      if(reply){puts(reply);cJSON_free(reply);}return code;
+    }
     if(!strcmp(argv[1],"--human")) {
       char *reply=NULL;int code=sp_human_apply_signed(argv[3],buf,&reply);
       if(reply){puts(reply);cJSON_free(reply);}return code;

@@ -125,7 +125,8 @@ int sp_http_exchange(const char *endpoint,const char *method,const char *path,co
   if(!body)body="";
   if(!out||!size||!method||!path||deadline<0||strlen(body)>8192||endpoint_address(endpoint,&addr))return -1;
   if(strcmp(method,"GET")&&strcmp(method,"POST"))return -1;
-  if(strcmp(path,"/incidents")&&strcmp(path,"/human-actions")&&strcmp(path,"/human-results"))return -1;
+  if(strcmp(path,"/incidents")&&strcmp(path,"/human-actions")&&strcmp(path,"/human-results")&&
+     strcmp(path,"/v1/commands")&&strcmp(path,"/v1/state"))return -1;
   n=snprintf(header,sizeof(header),"%s %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %lu\r\nConnection: close\r\n\r\n",method,path,endpoint,(unsigned long)strlen(body));
   if(n<0||(size_t)n>=sizeof(header)) return -1;
   fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0) return -1;
