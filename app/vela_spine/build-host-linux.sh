@@ -14,5 +14,7 @@ sources=(spine_main.c native/spine.c native/ingress.c native/store.c native/tran
 "$cc" "${flags[@]}" "${sources[@]}" "$cjson_dir/cJSON.c" -lm -o build/spine-cli
 "$cc" "${flags[@]}" "${sources[@]}" tests/fsync_fault.c "$cjson_dir/cJSON.c" -Wl,--wrap=fsync -lm -o build/spine-cli-fault
 "$cc" "${flags[@]}" -shared -fPIC -Wl,--no-undefined agent_adapter/readonly_call.c agent_adapter/query_context.c native/ingress.c native/spine.c "$cjson_dir/cJSON.c" -lm -o build/libspine-adapter.so
+"$cc" "${flags[@]}" -Iagent_adapter/board tests/task_tool_choice_test.c "$cjson_dir/cJSON.c" -lm -o build/task-tool-choice-test
+build/task-tool-choice-test
 SPINE_CLI="$PWD/build/spine-cli" SPINE_FAULT_CLI="$PWD/build/spine-cli-fault" \
 SPINE_ADAPTER_LIB="$PWD/build/libspine-adapter.so" python3 -m unittest discover -s tests -v
