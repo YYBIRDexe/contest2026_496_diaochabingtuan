@@ -10,7 +10,7 @@
 ```
 
 1. 提交计划：`--task-plan FILE ROOT`，JSON 为 `spine-plan-v1`（下节）。计划先落盘再谈派单，落盘成功才返回 `PLAN_PERSISTED`。
-2. 派单：`--task-dispatch ROOT ENDPOINT`，对每条 PENDING 任务向 `POST /v1/commands` 发 ASSIGN（见 `ROBOT-PROTOCOL.md`）。仅当应答 `persisted=true`、`motion=false`、`ack_scope=SIMULATOR_STORAGE_ONLY` 且任务 `state=ACCEPTED`、`task_id/robot_id/revision` 与请求一致，才把本地状态写成 DISPATCHED。**ACCEPTED 不代表执行完成。**
+2. 派单：`--task-dispatch ROOT ENDPOINT`，先将 PENDING 持久化为 DISPATCHING，再向 `POST /v1/commands` 发 ASSIGN（见 `ROBOT-PROTOCOL.md`）；意图保存失败时不发送网络请求。重试 DISPATCHING 使用原命令 ID。仅当应答 `persisted=true`、`motion=false`、`ack_scope=SIMULATOR_STORAGE_ONLY` 且任务 `state=ACCEPTED`、`task_id/robot_id/revision` 与请求一致，才把本地状态写成 DISPATCHED。**ACCEPTED 不代表执行完成。**
 3. 回执：`--task-poll ROOT ENDPOINT` 读 `GET /v1/state`；只更新已派单任务；`sequence` 必须严格递增，旧回执丢弃，错车辆/错版本记 `VEHICLE_STATE_CONFLICT` 且不改本地状态；网络失败直接返回 4，**任何超时都不改状态、不释放归属、不重派**。
 4. 查询：`--task-view ROOT [TASK_ID]`。
 
@@ -37,13 +37,18 @@
 ## 状态机
 
 ```
-PENDING --派单成功--> DISPATCHED --回执--> RUNNING/BLOCKED --> COMPLETED/FAILED
-   |                      |                    |
-   |                      +--风险/人工停止--> STOP_REQUESTED --执行器确认--> STOP_CONFIRMED
-   +--未派单即停止--> CANCELLED
+PENDING --发送前落盘--> DISPATCHING --有效ACK--> DISPATCHED --回执--> RUNNING/BLOCKED
+   |                       |                     |                     |
+   |                       +------风险/人工停止---+---------------------+
+   |                                             v
+   +--从未尝试派单即停止--> CANCELLED          STOP_REQUESTED --停止确认--> STOP_CONFIRMED
 ```
 
 终态：`COMPLETED / FAILED / STOP_CONFIRMED / CANCELLED`。`STOP_REQUESTED` 不是终态，归属不释放，直到执行器回 `STOP_CONFIRMED`。
+
+DISPATCHING 表示任务可能已被执行器接收；超时、错误 ACK 或确认保存失败均不能将其当作“从未发送”。只能使用原命令重试，或转 STOP_REQUESTED 等待执行器确认，不能本地取消并释放车辆。原子保存发送意图时也复查任务状态和车辆占用，避免并发停止后仍发送新授权。普通任务在未请求停止时可由有效回执进入 COMPLETED/FAILED；一旦进入 STOP_REQUESTED，迟到的 COMPLETED/FAILED 只更新执行器状态及递增序号，不释放归属，必须显式 STOP_CONFIRMED。
+
+2026-10-28 发送意图加固正在进行真板部署验收；旧固件的 PENDING 可能包含曾尝试发送的任务，升级或迁移前需对照执行器核查，不可直接视为未发送。新状态账本不能直接交给不认识 DISPATCHING 的旧固件使用。
 
 ## 风险联动
 

@@ -134,7 +134,7 @@ def main():
             planned=adb('shell','vela_spine','--task-plan',planfile,root)
             if 'PLAN_PERSISTED' not in planned:raise RuntimeError('plan not persisted')
             offline=adb('shell','vela_spine','--task-dispatch',root,'127.0.0.1:9')
-            if 'PARTIAL_NETWORK_ERROR' not in offline or any(view(root,t)!='PENDING' for t in ids):
+            if 'PARTIAL_NETWORK_ERROR' not in offline or any(view(root,t)!='DISPATCHING' for t in ids):
                 raise RuntimeError('offline handling failed')
             adb('shell','vela_spine','--task-dispatch',root,a.fleet_endpoint)
             if any(view(root,t)!='DISPATCHED' for t in ids):raise RuntimeError('three dispatches not acknowledged')
@@ -178,7 +178,7 @@ def main():
                     raise RuntimeError('tasks lost on restart')
                 if a.human_test_key and human_state(root,event['event_id'])!=('CLOSED',False):
                     raise RuntimeError('human close lost on restart')
-            results.append(dict(round=n,board_root=root,tasks=ids,offline_pending=True,
+            results.append(dict(round=n,board_root=root,tasks=ids,offline_held=True,offline_state='DISPATCHING',
                 fleet_accept_run_complete=True,risk_score=92,risk_stop_confirmed=True,
                 simulated_platform_ack=True,human_steps_verified=bool(a.human_test_key),
                 reboot_verified=a.reboot,motion=False))

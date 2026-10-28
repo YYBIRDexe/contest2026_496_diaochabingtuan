@@ -123,7 +123,7 @@ def run_round_offline(root, endpoint_holder, fleet_ref):
             'status_while_offline': [row['status'] for row in dropped['tasks']],
             'local_state_after_drop': pending, 'vehicle_rows_after_drop': orphan,
             'recovered_dispatch': again['status'], 'local_final': final,
-            'passed': dropped['status'] == 'PARTIAL_NETWORK_ERROR' and pending == 'PENDING'
+            'passed': dropped['status'] == 'PARTIAL_NETWORK_ERROR' and pending == 'DISPATCHING'
                       and not orphan and final == 'COMPLETED'}
 
 

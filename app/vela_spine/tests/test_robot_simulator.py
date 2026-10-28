@@ -117,6 +117,23 @@ class RobotNetworkTests(unittest.TestCase):
         self.fleet.offline.clear()
         self.assertEqual(self.post(message)["task"]["state"], "RUNNING")
 
+    def test_explicit_stop_confirms_terminal_race_and_is_idempotent(self):
+        self.post(assign());self.post(report('RUNNING',1));self.post(report('COMPLETED',2))
+        stop=assign(command='stop-terminal');stop.pop('tag_id');stop['action']='STOP'
+        confirmed=self.post(stop)
+        self.assertEqual(confirmed['task']['state'],'STOP_CONFIRMED')
+        self.assertEqual(confirmed['task']['sequence'],3)
+        self.assertEqual(self.post(stop),confirmed)
+
+    def test_stop_old_terminal_task_cannot_confirm_robot_serving_new_task(self):
+        self.post(assign());self.post(report('RUNNING',1));self.post(report('COMPLETED',2))
+        self.post(assign(task='new-task',command='new-assign'))
+        stop=assign(command='stop-old');stop.pop('tag_id');stop['action']='STOP'
+        self.post(stop,409)
+        rows={row['task_id']:row for row in self.fleet.snapshot()['tasks']}
+        self.assertEqual(rows['task1']['state'],'COMPLETED')
+        self.assertEqual(rows['new-task']['state'],'ACCEPTED')
+
     def test_reject_malformed_or_live_input(self):
         for change in ({"mode": "live"}, {"robot_id": "S4"}, {"revision": True},
                        {"revision": 0}, {"extra": 1}, {"task_id": "../x"}):

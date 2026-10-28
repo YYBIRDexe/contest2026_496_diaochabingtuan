@@ -36,9 +36,9 @@ POST /v1/commands，JSON 最多 4096 字节，拒绝重复键、未知字段及�
 {"schema":"spine-robot-sim-v1","mode":"simulation","command_id":"stop-inspect-D1-1","robot_id":"S1","task_id":"inspect-D1","revision":1,"action":"STOP"}
 ```
 
-STOP 的应答是任务快照 `state=STOP_CONFIRMED`、`sequence` 已加 1；STOP 不可重复用于终态任务，车辆/版本不符 409。
+STOP 的应答是任务快照 `state=STOP_CONFIRMED`、`sequence` 已加 1。车辆/版本不符返回409。同一命令重试返回原应答。若完成/失败与停止请求竞态，执行器仍应显式确认旧任务已静止；PC模拟器仅在该车辆没有另一活动任务时允许将终态任务转为 STOP_CONFIRMED，否则拒绝旧任务的 STOP。序号达到上限时拒绝，不能溢出后继续授权。
 
-ACCEPTED→RUNNING→COMPLETED；RUNNING 可进入 BLOCKED，BLOCKED 只能恢复 RUNNING 或终止 FAILED/CANCELLED。ACCEPTED 也允许 FAILED/CANCELLED。`STOP_CONFIRMED` 是 v2 的第四个终态，只能由 STOP 动作进入，不能由 REPORT 伪造。终态不再接收任何转换。sequence 必须逐次加 1，错序拒绝后由发送方补齐，不能跳过回执。CANCELLED 是模拟执行器确认已取消，不是指挥端仅发出取消请求。
+ACCEPTED→RUNNING→COMPLETED；RUNNING 可进入 BLOCKED，BLOCKED 只能恢复 RUNNING 或终止 FAILED/CANCELLED。ACCEPTED 也允许 FAILED/CANCELLED。`STOP_CONFIRMED` 是 v2 的第四个终态，只能由 STOP 动作进入，不能由 REPORT 伪造。终态不再接收 REPORT 转换，只有上述明确 STOP 确认例外。sequence 必须逐次加 1，错序拒绝后由发送方补齐，不能跳过回执。CANCELLED 是模拟执行器确认已取消，不是指挥端仅发出取消请求。
 
 HTTP200 返回 persisted=true、ack_scope=SIMULATOR_STORAGE_ONLY、motion=false 及命令生效时的任务快照。相同 command_id 和正文重试返回原应答；历史 ACK 不是实时状态，要查询 /state。同 ID 不同正文 409；业务冲突 409 且 persisted=false；注入离线或存储失败 503，不得当完成或释放任务。SQLite 事务提交后才允许发 ACK。
 

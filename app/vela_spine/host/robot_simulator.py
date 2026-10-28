@@ -133,8 +133,16 @@ class Fleet:
             elif message["action"] == "STOP":
                 if not task or (task["revision"], task["robot_id"]) != (message["revision"], message["robot_id"]):
                     raise ProtocolError("stale revision or wrong owner")
-                if task["state"] in TERMINAL:
-                    raise ProtocolError("task already terminal")
+                # An explicit STOP must also confirm quiescence when completion
+                # raced with the request. Never stop an old task on a busy robot.
+                other = db.execute(
+                    "SELECT task_id FROM tasks WHERE robot_id=? AND task_id<>? "
+                    "AND state NOT IN (%s)" % ",".join("?" * len(TERMINAL)),
+                    (message["robot_id"], message["task_id"]) + TERMINAL).fetchone()
+                if other:
+                    raise ProtocolError("robot serving another task")
+                if task["sequence"] >= 2147483647:
+                    raise ProtocolError("sequence exhausted")
                 db.execute("UPDATE tasks SET state=?,sequence=? WHERE task_id=?", (
                     "STOP_CONFIRMED", task["sequence"] + 1, message["task_id"]))
             else:
