@@ -62,7 +62,7 @@ PENDING --派单成功--> DISPATCHED --回执--> RUNNING/BLOCKED --> COMPLETED/F
 | `--task-stop-sync ROOT ENDPOINT` | 发送 STOP 并等执行器确认：`STOP_CONFIRMED` 才转终态 |
 | `--task-view ROOT [TASK_ID]` | 读账本 |
 
-退出码：`0` 成功；`2` 参数或计划校验失败（未产生任何状态变化）；`3` 账本损坏或存储失败；`4` 网络或回执校验失败。批量操作可能在某一项失败前已成功处理其他项；执行器可能已经接收，而本地持久化尚未成功，必须逐项核对并使用原命令 ID 幂等重试，不能把非零返回理解为“什么都没发生”。源码已修复部分保存失败误报成功的路径，当前真板尚未部署该修复。所有应答都带 `motion:false`；派单类应答带 `ack_scope=REMOTE_STORAGE_ONLY`，账本类应答带 `ack_scope=LOCAL_STORAGE_ONLY`。
+退出码：`0` 成功；`2` 参数或计划校验失败（未产生任何状态变化）；`3` 账本损坏或存储失败；`4` 网络或回执校验失败。批量操作可能在某一项失败前已成功处理其他项；执行器可能已经接收，而本地持久化尚未成功，必须逐项核对并使用原命令 ID 幂等重试，不能把非零返回理解为“什么都没发生”。源码已修复部分保存失败误报成功的路径，当前真板已部署该修复并完成模拟闭环回归；存储故障注入验证在主机执行。所有应答都带 `motion:false`；派单类应答带 `ack_scope=REMOTE_STORAGE_ONLY`，账本类应答带 `ack_scope=LOCAL_STORAGE_ONLY`。
 
 ## 未实现（红线）
 
