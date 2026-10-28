@@ -392,6 +392,36 @@ class TaskLedger(unittest.TestCase):
         self.assertEqual(self.fleet_task('T1')[0]['state'],'ACCEPTED')
         self.assertEqual(self.sync()['tasks'][0]['status'],'STOP_CONFIRMED')
 
+    def test_concurrent_dispatchers_keep_one_remote_assignment(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.plan()
+        gate=threading.Barrier(4)
+        def dispatch_once():
+            gate.wait(timeout=10)
+            return subprocess.run([BIN,'--task-dispatch',str(self.ledger),self.endpoint],
+                                  capture_output=True,text=True,timeout=20)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            runs=list(pool.map(lambda _:dispatch_once(),range(4)))
+        self.assertTrue(all(run.returncode in (0,3) for run in runs),
+                        [(run.returncode,run.stdout,run.stderr) for run in runs])
+        rows=self.fleet.snapshot()['tasks']
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['task_id'],'T1')
+        self.assertEqual(rows[0]['state'],'ACCEPTED')
+        self.assertEqual(rows[0]['sequence'],0)
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'DISPATCHED')
+        with self.fleet.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM commands WHERE command_id='assign-T1-1'").fetchone()[0],1)
+
+    def test_uncertain_dispatch_reserves_robot_against_other_pending_task(self):
+        self.plan();self.dispatch('127.0.0.1:9',expect=4)
+        self.plan(version=2,tasks=[dict(task_id='T2',tag_id='D2',robot_id='S1',revision=1)])
+        dispatched=self.dispatch()
+        statuses={row['task_id']:row['status'] for row in dispatched['tasks']}
+        self.assertEqual(statuses['T1'],'DISPATCHED')
+        self.assertEqual(statuses['T2'],'HELD_ROBOT_BUSY')
+        self.assertEqual([row['task_id'] for row in self.fleet.snapshot()['tasks']],['T1'])
+
     def test_risk_hold_survives_replan(self):
         self.plan(tasks=[dict(task_id='T1', tag_id='D1', robot_id='S1', revision=1)])
         self.assertEqual(self.ingest()['status'], 'ACCEPTED_PERSISTED')
