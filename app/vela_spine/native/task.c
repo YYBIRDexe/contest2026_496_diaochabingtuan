@@ -144,11 +144,12 @@ static cJSON *load(const char *root)
   if(n<=0||n>(ssize_t)SP_TASK_SNAPSHOT_MAX){free(buf);return NULL;}
   buf[n]=0;
   if(memchr(buf,0,(size_t)n)||!sp_json_bounded(buf)){free(buf);return NULL;}
-  doc=cJSON_Parse(buf);
+  doc=cJSON_ParseWithOpts(buf,NULL,1);
   free(buf);
   if(!doc)return NULL;
+  if(!cJSON_IsObject(doc)||duplicate_key(doc))goto bad;
   tasks=get(doc,"tasks");cmds=get(doc,"commands");sum=text_of(doc,"crc32");
-  if(!cJSON_IsNumber(get(doc,"schema"))||get(doc,"schema")->valueint!=1)goto bad;
+  if(number_of(doc,"schema",1,1,NULL))goto bad;
   if(!cJSON_IsString(get(doc,"plan_id"))||!sum)goto bad;
   if(number_of(doc,"plan_version",0,INT_MAX,NULL))goto bad;
   if(!cJSON_IsArray(tasks)||cJSON_GetArraySize(tasks)>SP_TASK_CAPACITY)goto bad;
@@ -730,7 +731,7 @@ static const char *next_state(const char *local,const char *vehicle)
 }
 int sp_task_poll(const char *root,const char *endpoint,char **reply)
 {
-  static const char *const forward[]={"RUNNING","BLOCKED","COMPLETED","FAILED","STOP_CONFIRMED"};
+  static const char *const forward[]={"RUNNING","BLOCKED","COMPLETED","FAILED","CANCELLED","STOP_CONFIRMED"};
   char resp[4096];cJSON *state_doc=NULL,*vehicles=NULL,*ledger=NULL,*rows=NULL,*o=NULL,*arr=NULL,*row;
   int fd=-1,ret=3,changed=0;
   if(reply)*reply=NULL;
@@ -781,7 +782,7 @@ int sp_task_poll(const char *root,const char *endpoint,char **reply)
         seq_num=(long)get(vehicle,"sequence")->valueint;
         if(seq_num<lseq)note="STALE_PROGRESS_IGNORED";
         else if(seq_num==lseq)note="DUPLICATE_REPORT";
-        else if(!vst||!one_of(vst,forward,5))note="UNSUPPORTED_STATE";
+        else if(!vst||!one_of(vst,forward,sizeof(forward)/sizeof(*forward)))note="UNSUPPORTED_STATE";
         else{
           moved=next_state(st,vst);
           note=moved?"REPORT_APPLIED":"STOP_PENDING_EXECUTOR";

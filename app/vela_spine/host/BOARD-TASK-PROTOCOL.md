@@ -46,7 +46,7 @@ PENDING --发送前落盘--> DISPATCHING --有效ACK--> DISPATCHED --回执--> R
 
 终态：`COMPLETED / FAILED / STOP_CONFIRMED / CANCELLED`。`STOP_REQUESTED` 不是终态，归属不释放，直到执行器回 `STOP_CONFIRMED`。
 
-DISPATCHING 表示任务可能已被执行器接收；超时、错误 ACK 或确认保存失败均不能将其当作“从未发送”。只能使用原命令重试，或转 STOP_REQUESTED 等待执行器确认，不能本地取消并释放车辆。原子保存发送意图时也复查任务状态和车辆占用，避免并发停止后仍发送新授权。普通任务在未请求停止时可由有效回执进入 COMPLETED/FAILED；一旦进入 STOP_REQUESTED，迟到的 COMPLETED/FAILED 只更新执行器状态及递增序号，不释放归属，必须显式 STOP_CONFIRMED。
+DISPATCHING 表示任务可能已被执行器接收；超时、错误 ACK 或确认保存失败均不能将其当作“从未发送”。只能使用原命令重试，或转 STOP_REQUESTED 等待执行器确认，不能本地取消并释放车辆。原子保存发送意图时也复查任务状态和车辆占用，避免并发停止后仍发送新授权。普通任务在未请求停止时可由有效回执进入 COMPLETED/FAILED；一旦进入 STOP_REQUESTED，迟到的 COMPLETED/FAILED/CANCELLED 只更新执行器状态及递增序号，不释放归属，必须显式 STOP_CONFIRMED。
 
 2026-10-28 发送意图加固正在进行真板部署验收；旧固件的 PENDING 可能包含曾尝试发送的任务，升级或迁移前需对照执行器核查，不可直接视为未发送。新状态账本不能直接交给不认识 DISPATCHING 的旧固件使用。
 
@@ -72,3 +72,5 @@ DISPATCHING 表示任务可能已被执行器接收；超时、错误 ACK 或确
 ## 未实现（红线）
 
 设备身份认证与签名、心跳/租约、区域禁入、车端物理安全停车、真实导航或运动、云端完整协商与自动重规划均未验证。AUTO 当前采用模拟的等成本、等资格和每车一个任务配额；不是实际电量、能耗或可达性验证。派单成功只证明模拟器持久化接收，不得据此声称真实车辆已运动或任务已完成。
+
+账本加载补强（待板端部署）：拒绝尾随非JSON内容、重复根字段及非整数schema；损坏文件不自动重建或覆盖。执行器在未请求停止时确认CANCELLED可转终态；已有STOP_REQUESTED时仍等待STOP_CONFIRMED。

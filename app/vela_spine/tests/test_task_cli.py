@@ -487,6 +487,20 @@ class TaskLedger(unittest.TestCase):
         self.assertEqual(self.view('T1')['tasks'][0]['state'], 'CANCELLED')
         self.assertEqual(self.dispatch()['status'], 'NOTHING_TO_DISPATCH')
 
+    def test_executor_confirmed_cancel_is_applied_without_stop_request(self):
+        self.plan();self.dispatch();self.report('S1','T1',1,'CANCELLED',1)
+        result=self.poll()
+        self.assertEqual(result['tasks'][0]['local_state'],'CANCELLED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'CANCELLED')
+
+    def test_cancel_report_does_not_replace_requested_stop_confirmation(self):
+        self.plan();self.dispatch();self.stop('T1');self.report('S1','T1',1,'CANCELLED',1)
+        result=self.poll();row=result['tasks'][0]
+        self.assertEqual(row['local_state'],'STOP_REQUESTED')
+        self.assertEqual(row['vehicle_state'],'CANCELLED')
+        self.assertEqual(row['sequence'],1)
+        self.assertEqual(self.sync()['tasks'][0]['status'],'STOP_CONFIRMED')
+
     def test_wrong_owner_report_is_not_applied(self):
         self.plan(tasks=[dict(task_id='T1', tag_id='D1', robot_id='S1', revision=1)])
         self.dispatch()
@@ -501,6 +515,17 @@ class TaskLedger(unittest.TestCase):
         (self.ledger / 'tasks.json').write_text('{not json}', encoding='utf-8')
         self.view(expect=3)
         self.assertEqual((self.ledger / 'tasks.json').read_text(encoding='utf-8'), '{not json}')
+
+    def test_ambiguous_ledger_metadata_is_refused_without_rewriting(self):
+        self.plan();path=self.ledger/'tasks.json';original=path.read_text()
+        malformed=[original+' trailing',original.replace('"schema":1','"schema":1.5',1),
+                   original.replace('"schema":1','"schema":1,"schema":2',1)]
+        for body in malformed:
+            with self.subTest(body=body[:70]):
+                path.write_text(body)
+                self.view(expect=3)
+                self.assertEqual(path.read_text(),body)
+        path.write_text(original)
 
 
 if __name__ == '__main__':
