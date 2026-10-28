@@ -33,7 +33,7 @@ static char *tool_status(const char *root,const char *args,int *code)
   char *inner=NULL;const char *task_id=NULL;cJSON *doc=parse_object(args,1),*id;
   if(!doc){*code=2;return NULL;}
   id=cJSON_GetObjectItemCaseSensitive(doc,"task_id");
-  if(id&&!cJSON_IsString(id)){cJSON_Delete(doc);*code=2;return NULL;}
+  if((cJSON_GetArraySize(doc)&&!id)||(id&&!cJSON_IsString(id))){cJSON_Delete(doc);*code=2;return NULL;}
   if(id)task_id=id->valuestring;
   *code=sp_task_view(root,task_id,&inner);
   cJSON_Delete(doc);
@@ -54,22 +54,26 @@ static char *tool_submit(const char *root,const char *args,int *code)
 
 static char *tool_stop(const char *root,const char *endpoint,const char *args,int *code)
 {
-  char *inner=NULL,*sync=NULL;cJSON *doc=parse_object(args,1),*id;
+  char *inner=NULL,*sync=NULL;int sync_code;cJSON *doc=parse_object(args,1),*id;
   if(!doc){*code=2;return NULL;}
   id=cJSON_GetObjectItemCaseSensitive(doc,"task_id");
   if(!cJSON_IsString(id)){cJSON_Delete(doc);*code=2;return NULL;}
   *code=sp_task_stop(root,id->valuestring,"AGENT_REQUEST",&inner);
   cJSON_Delete(doc);
-  if(!endpoint)return inner;
-  if(sp_task_stop_sync(root,endpoint,&sync)==3){free(inner);free(sync);*code=3;return NULL;}
+  if(!endpoint||*code!=0)return inner;
+  sync_code=sp_task_stop_sync(root,endpoint,&sync);
+  if(sync_code==3){free(inner);free(sync);*code=3;return NULL;}
   if(sync&&inner){
     cJSON *merged=cJSON_CreateObject(),*a=cJSON_Parse(inner),*b=cJSON_Parse(sync);
-    if(merged&&a&&b&&cJSON_AddItemToObject(merged,"request",a)&&
-       cJSON_AddItemToObject(merged,"executor",b)){
+    if(merged&&a&&b&&cJSON_AddItemToObject(merged,"request",a)){
+      a=NULL;
+      if(cJSON_AddItemToObject(merged,"executor",b)){
+      b=NULL;
       char *text=cJSON_PrintUnformatted(merged);
       cJSON_Delete(merged);free(inner);free(sync);
-      if(text)return text;
+      if(text){*code=sync_code;return text;}
       *code=3;return NULL;
+      }
     }
     cJSON_Delete(merged);cJSON_Delete(a);cJSON_Delete(b);
   }

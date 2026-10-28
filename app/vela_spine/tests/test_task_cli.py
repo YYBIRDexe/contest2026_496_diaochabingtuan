@@ -9,12 +9,14 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 from host.robot_simulator import Fleet, SCHEMA, make_server
 
 BIN = os.environ.get('SPINE_CLI')
+FAULT = os.environ.get('SPINE_FAULT_CLI')
 
 
 @unittest.skipUnless(BIN, 'set SPINE_CLI')
@@ -86,9 +88,63 @@ class TaskLedger(unittest.TestCase):
     def fleet_task(self, task):
         return [dict(row) for row in self.fleet.snapshot()['tasks'] if row['task_id'] == task]
 
+    def test_task_worker_dispatches_and_reacts_to_risk(self):
+        self.plan()
+        cmd=[BIN,'--task-watch',str(self.ledger),self.endpoint,'1']
+        first=subprocess.run(cmd,capture_output=True,text=True,timeout=15)
+        self.assertEqual(first.returncode,0,first.stderr)
+        self.assertEqual(self.fleet_task('T1')[0]['state'],'ACCEPTED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'DISPATCHED')
+        self.ingest(tag='D1')
+        second=subprocess.run(cmd,capture_output=True,text=True,timeout=15)
+        self.assertEqual(second.returncode,0,second.stderr)
+        self.assertEqual(self.fleet_task('T1')[0]['state'],'STOP_CONFIRMED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_CONFIRMED')
+
+    def test_mixed_explicit_and_auto_assignments_use_all_three_robots(self):
+        result=self.plan(tasks=[dict(task_id='T1',tag_id='D1',robot_id='S1',revision=1),
+                                dict(task_id='T2',tag_id='D2',robot_id='AUTO',revision=1)])
+        owners={task['robot_id'] for task in result['tasks']}
+        self.assertEqual(len(owners),2)
+        self.assertIn('S1',owners)
+
+    def test_generated_command_id_must_fit_protocol_limit(self):
+        valid='a'*55
+        self.plan(tasks=[dict(task_id=valid,tag_id='D1',robot_id='S1',revision=1)])
+        self.assertEqual(self.dispatch()['tasks'][0]['status'],'DISPATCHED')
+        rejected=self.plan(version=2,plan_id='p2',
+            tasks=[dict(task_id='b'*56,tag_id='D2',robot_id='S2',revision=1)],expect=2)
+        self.assertEqual(rejected['status'],'REJECTED')
+        higher=self.plan(version=2,plan_id='p2',
+            tasks=[dict(task_id='c'*55,tag_id='D2',robot_id='S2',revision=10)],expect=2)
+        self.assertEqual(higher['status'],'REJECTED')
+        self.assertEqual(self.view(valid)['tasks'][0]['state'],'DISPATCHED')
+
+    def test_auto_assignment_excludes_existing_busy_robot(self):
+        self.plan();self.dispatch()
+        result=self.plan(version=2,plan_id='p2',tasks=[dict(
+            task_id='T2',tag_id='D2',robot_id='AUTO',revision=1)])
+        allocated={t['task_id']:t['robot_id'] for t in result['tasks']}
+        self.assertEqual(allocated['T1'],'S1')
+        self.assertIn(allocated['T2'],('S2','S3'))
+        self.assertEqual(self.dispatch()['tasks'][0]['status'],'DISPATCHED')
+
+    def test_auto_assignment_excludes_pending_and_refuses_full_fleet(self):
+        self.plan(tasks=[dict(task_id='T1',tag_id='D1',robot_id='S1',revision=1),
+                         dict(task_id='T2',tag_id='D2',robot_id='S2',revision=1)])
+        result=self.plan(version=2,plan_id='p2',tasks=[dict(
+            task_id='T3',tag_id='D3',robot_id='AUTO',revision=1)])
+        self.assertEqual(next(t for t in result['tasks'] if t['task_id']=='T3')['robot_id'],'S3')
+        rejected=self.plan(version=3,plan_id='p3',tasks=[dict(
+            task_id='T4',tag_id='D4',robot_id='AUTO',revision=1)],expect=2)
+        self.assertEqual(rejected['status'],'REJECTED')
+        self.assertEqual(self.view('T3')['tasks'][0]['state'],'PENDING')
+
     def test_ack_is_not_completion(self):
         planned = self.plan()
         self.assertEqual(planned['status'], 'PLAN_PERSISTED')
+        self.assertEqual(planned['previous_plan_version'], 0)
+        self.assertEqual(planned['stored_plan_version'], 1)
         self.assertEqual(planned['tasks'][0]['state'], 'PENDING')
         self.assertFalse(planned['motion'])
         self.assertEqual(planned['ack_scope'], 'LOCAL_STORAGE_ONLY')
@@ -119,8 +175,8 @@ class TaskLedger(unittest.TestCase):
         double = self.plan(version=2, tasks=[dict(task_id='T1', tag_id='D1', robot_id='S1', revision=2)],
                            expect=2)
         self.assertEqual(double['status'], 'DOUBLE_AUTHORIZATION_REJECTED')
-        stale = self.plan(version=1, plan_id='p1', tasks=[dict(task_id='T2', tag_id='D3', robot_id='S2', revision=1)])
-        self.assertEqual(stale['status'], 'DUPLICATE_PLAN')
+        stale = self.plan(version=1, plan_id='p1', tasks=[dict(task_id='T2', tag_id='D3', robot_id='S2', revision=1)], expect=2)
+        self.assertEqual(stale['status'], 'PLAN_VERSION_CONFLICT')
         bad = self.plan(version=3, tasks=[dict(task_id='T3', tag_id='D1', robot_id='S1', revision=1),
                                          dict(task_id='T4', tag_id='D1', robot_id='S2', revision=1)], expect=2)
         self.assertEqual(bad['status'], 'REJECTED')
@@ -134,6 +190,122 @@ class TaskLedger(unittest.TestCase):
         self.assertFalse(failed['tasks'][0]['dispatched'])
         self.assertEqual(self.view('T1')['tasks'][0]['state'], 'PENDING')
         self.assertEqual(self.fleet_task('T1'), [])
+
+    @unittest.skipUnless(FAULT, 'set SPINE_FAULT_CLI')
+    def test_poll_sync_failure_is_not_reported_as_success(self):
+        self.plan();self.dispatch();self.report('S1','T1',1,'RUNNING',1)
+        path=self.ledger/'tasks.json';before=path.read_bytes()
+        result=subprocess.run([FAULT,'--task-poll',str(self.ledger),self.endpoint],
+            capture_output=True,text=True,env=dict(os.environ,SP_TEST_FSYNC_FAIL='1'))
+        self.assertEqual(result.returncode,3,result.stdout+result.stderr)
+        self.assertFalse(result.stdout.strip())
+        self.assertEqual(path.read_bytes(),before)
+        self.assertEqual(self.poll()['tasks'][0]['local_state'],'RUNNING')
+
+    @unittest.skipUnless(FAULT, 'set SPINE_FAULT_CLI')
+    def test_dispatch_sync_failure_retries_without_false_success(self):
+        self.plan();path=self.ledger/'tasks.json';before=path.read_bytes()
+        result=subprocess.run([FAULT,'--task-dispatch',str(self.ledger),self.endpoint],
+            capture_output=True,text=True,env=dict(os.environ,SP_TEST_FSYNC_FAIL='1'))
+        self.assertEqual(result.returncode,3,result.stdout+result.stderr)
+        self.assertEqual(json.loads(result.stdout)['status'],'PARTIAL_STORAGE_ERROR')
+        self.assertEqual(path.read_bytes(),before)
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'PENDING')
+        self.assertEqual(self.fleet_task('T1')[0]['state'],'ACCEPTED')
+        self.assertEqual(self.dispatch()['tasks'][0]['status'],'DISPATCHED')
+
+    def test_wrong_dispatch_ack_is_an_error_without_local_authorization(self):
+        self.plan();original=self.fleet.apply
+        def wrong(message):
+            response=original(message)
+            return dict(response,task=dict(response['task'],robot_id='S2'))
+        with patch.object(self.fleet,'apply',side_effect=wrong):
+            result=self.dispatch(expect=4)
+        self.assertEqual(result['tasks'][0]['status'],'ACK_REJECTED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'PENDING')
+        self.assertEqual(self.dispatch()['tasks'][0]['status'],'DISPATCHED')
+
+    def test_wrong_command_id_ack_is_rejected_and_can_retry(self):
+        self.plan();original=self.fleet.apply
+        def wrong(message):
+            response=original(message)
+            return dict(response,command_id='wrong-command')
+        with patch.object(self.fleet,'apply',side_effect=wrong):
+            result=self.dispatch(expect=4)
+        self.assertEqual(result['tasks'][0]['status'],'ACK_REJECTED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'PENDING')
+        self.assertEqual(self.dispatch()['tasks'][0]['status'],'DISPATCHED')
+
+    def test_ack_with_trailing_garbage_cannot_authorize(self):
+        from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+        self.plan()
+        body=json.dumps(dict(schema=SCHEMA,command_id='assign-T1-1',persisted=True,
+            ack_scope='SIMULATOR_STORAGE_ONLY',motion=False,
+            task=dict(task_id='T1',robot_id='S1',revision=1,state='ACCEPTED'))).encode()+b'garbage'
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self,*args):pass
+            def do_POST(self):
+                self.rfile.read(int(self.headers['Content-Length']))
+                self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+        server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
+        try:
+            result=self.dispatch('127.0.0.1:%d'%server.server_port,expect=4)
+            self.assertEqual(result['tasks'][0]['status'],'ACK_REJECTED')
+            self.assertEqual(self.view('T1')['tasks'][0]['state'],'PENDING')
+        finally:
+            server.shutdown();server.server_close();worker.join()
+
+    def test_poll_rejects_wrong_source_and_fractional_sequence(self):
+        self.plan();self.dispatch();self.report('S1','T1',1,'RUNNING',1)
+        original=self.fleet.current_snapshot
+        def wrong_source():return dict(original(),source='UNTRUSTED_SOURCE')
+        with patch.object(self.fleet,'current_snapshot',side_effect=wrong_source):
+            self.poll(expect=4)
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'DISPATCHED')
+        def fractional():
+            state=original();state['tasks'][0]['sequence']=1.5;return state
+        with patch.object(self.fleet,'current_snapshot',side_effect=fractional):
+            self.poll(expect=4)
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'DISPATCHED')
+        self.assertEqual(self.poll()['tasks'][0]['local_state'],'RUNNING')
+
+    @unittest.skipUnless(FAULT, 'set SPINE_FAULT_CLI')
+    def test_stop_confirmation_sync_failure_retries_without_false_success(self):
+        self.plan();self.dispatch();self.stop('T1')
+        path=self.ledger/'tasks.json';before=path.read_bytes()
+        result=subprocess.run([FAULT,'--task-stop-sync',str(self.ledger),self.endpoint],
+            capture_output=True,text=True,env=dict(os.environ,SP_TEST_FSYNC_FAIL='1'))
+        self.assertEqual(result.returncode,3,result.stdout+result.stderr)
+        self.assertEqual(json.loads(result.stdout)['status'],'PARTIAL_STORAGE_ERROR')
+        self.assertEqual(path.read_bytes(),before)
+        self.assertEqual(self.fleet_task('T1')[0]['state'],'STOP_CONFIRMED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_REQUESTED')
+        self.assertEqual(self.sync()['tasks'][0]['status'],'STOP_CONFIRMED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_CONFIRMED')
+
+    def test_wrong_stop_ack_is_an_error_without_release(self):
+        self.plan();self.dispatch();self.stop('T1');original=self.fleet.apply
+        def wrong(message):
+            response=original(message)
+            return dict(response,task=dict(response['task'],robot_id='S2'))
+        with patch.object(self.fleet,'apply',side_effect=wrong):
+            result=self.sync(expect=4)
+        self.assertEqual(result['tasks'][0]['status'],'ACK_REJECTED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_REQUESTED')
+        self.assertEqual(self.sync()['tasks'][0]['status'],'STOP_CONFIRMED')
+
+    def test_stop_ack_must_advance_sequence(self):
+        self.plan();self.dispatch();self.report('S1','T1',1,'RUNNING',1);self.poll();self.stop('T1')
+        original=self.fleet.apply
+        def stale(message):
+            response=original(message)
+            return dict(response,task=dict(response['task'],sequence=1))
+        with patch.object(self.fleet,'apply',side_effect=stale):
+            result=self.sync(expect=4)
+        self.assertEqual(result['tasks'][0]['status'],'ACK_REJECTED')
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_REQUESTED')
+        self.assertEqual(self.sync()['tasks'][0]['status'],'STOP_CONFIRMED')
 
     def test_risk_hold_survives_replan(self):
         self.plan(tasks=[dict(task_id='T1', tag_id='D1', robot_id='S1', revision=1)])

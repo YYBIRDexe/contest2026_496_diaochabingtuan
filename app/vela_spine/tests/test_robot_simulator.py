@@ -71,6 +71,24 @@ class RobotNetworkTests(unittest.TestCase):
         self.assertEqual(reopened.apply(message), original)
         self.assertEqual(reopened.snapshot()["tasks"][0]["state"], "RUNNING")
 
+    def test_live_snapshot_is_bounded_and_history_is_preserved(self):
+        for index in range(21):
+            robot='S'+str(index%3+1); task='old'+str(index)
+            self.fleet.apply(assign(robot,task,command='assign'+str(index)))
+            self.fleet.apply(dict(schema=SCHEMA,mode='simulation',command_id='stop'+str(index),
+                                  robot_id=robot,task_id=task,revision=1,action='STOP'))
+        for index in range(3):
+            task=str(index)+'x'*63
+            msg=assign('S'+str(index+1),task,command='latest'+str(index));msg['tag_id']='d'*64
+            self.fleet.apply(msg)
+        with urlopen(self.url+'/v1/state',timeout=4) as response:
+            body=response.read()
+        snapshot=json.loads(body)
+        self.assertLessEqual(len(body),2048)
+        self.assertEqual(len(snapshot['tasks']),3)
+        self.assertEqual({t['task_id'] for t in snapshot['tasks']},{str(i)+'x'*63 for i in range(3)})
+        self.assertEqual(len(self.fleet.snapshot()['tasks']),24)
+
     def test_conflict_busy_and_unique_owner(self):
         self.post(assign())
         self.post(assign(robot="S2"), 409)

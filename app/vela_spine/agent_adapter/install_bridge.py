@@ -95,7 +95,7 @@ if marker not in s:
  assert s.count(anchor)==1
  s=s.replace(anchor,'                spine_query ? NULL : tools_json, tool_output, tool_size, &msg);')
  p.write_text(s)
-p=base/'llm_proxy.c';s=p.read_text()
+ p=base/'llm_proxy.c';s=p.read_text();marker='/* CODEX_SPINE_READONLY_BRIDGE */'
 if marker not in s:
  anchor='    parse_ns_xml_tool_calls(resp);'
  assert s.count(anchor)==1

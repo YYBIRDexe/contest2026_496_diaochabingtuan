@@ -23,7 +23,7 @@ static const char *const terminal_states[]={"STOP_CONFIRMED","COMPLETED","FAILED
 #define TERMINAL_COUNT (sizeof(terminal_states)/sizeof(*terminal_states))
 
 struct plan_task {char task_id[ID_MAX+1];char tag_id[ID_MAX+1];char robot[8];long revision;long priority;};
-struct dispatch_item {char task_id[ID_MAX+1];char tag_id[ID_MAX+1];char robot[8];long revision;char command_id[104];char note[32];int frozen;int outcome;};
+struct dispatch_item {char task_id[ID_MAX+1];char tag_id[ID_MAX+1];char robot[8];long revision;long sequence;char command_id[104];char note[32];int frozen;int outcome;};
 
 static cJSON *get(const cJSON *o,const char *k){return cJSON_GetObjectItemCaseSensitive(o,k);}
 static const char *text_of(const cJSON *o,const char *k){const cJSON *v=get(o,k);return cJSON_IsString(v)?v->valuestring:NULL;}
@@ -121,13 +121,16 @@ static int new_ledger(cJSON **out)
   if(!doc||!tasks||!cmds){cJSON_Delete(doc);cJSON_Delete(tasks);cJSON_Delete(cmds);return -1;}
   if(!cJSON_AddNumberToObject(doc,"schema",1)||!cJSON_AddStringToObject(doc,"crc32","00000000")||
      !cJSON_AddStringToObject(doc,"plan_id","-")||!cJSON_AddNumberToObject(doc,"plan_version",0)||
-     !cJSON_AddItemToObject(doc,"tasks",tasks)||!cJSON_AddItemToObject(doc,"commands",cmds)){
+     !cJSON_AddItemToObject(doc,"tasks",tasks)){
     cJSON_Delete(tasks);cJSON_Delete(cmds);cJSON_Delete(doc);return -1;}
+  tasks=NULL; /* ownership moved to doc */
+  if(!cJSON_AddItemToObject(doc,"commands",cmds)){
+    cJSON_Delete(cmds);cJSON_Delete(doc);return -1;}
   *out=doc;return 0;
 }
 static cJSON *load(const char *root)
 {
-  char p[512],buf[SP_TASK_SNAPSHOT_MAX+1];int fd;ssize_t n;cJSON *doc=NULL,*tasks,*cmds,*rows,*c;
+  char p[512],*buf=NULL;int fd;ssize_t n;cJSON *doc=NULL,*tasks,*cmds,*rows,*c;
   const char *sum;
   if(path_of(p,sizeof(p),root,"tasks.json"))return NULL;
   fd=open(p,O_RDONLY);
@@ -135,11 +138,14 @@ static cJSON *load(const char *root)
     if(errno!=ENOENT)return NULL;
     return new_ledger(&doc)?NULL:doc;
   }
+  buf=malloc(SP_TASK_SNAPSHOT_MAX+1);
+  if(!buf){close(fd);return NULL;}
   n=read(fd,buf,SP_TASK_SNAPSHOT_MAX+1);close(fd);
-  if(n<=0||n>(ssize_t)SP_TASK_SNAPSHOT_MAX)return NULL;
+  if(n<=0||n>(ssize_t)SP_TASK_SNAPSHOT_MAX){free(buf);return NULL;}
   buf[n]=0;
-  if(memchr(buf,0,(size_t)n)||!sp_json_bounded(buf))return NULL;
+  if(memchr(buf,0,(size_t)n)||!sp_json_bounded(buf)){free(buf);return NULL;}
   doc=cJSON_Parse(buf);
+  free(buf);
   if(!doc)return NULL;
   tasks=get(doc,"tasks");cmds=get(doc,"commands");sum=text_of(doc,"crc32");
   if(!cJSON_IsNumber(get(doc,"schema"))||get(doc,"schema")->valueint!=1)goto bad;
@@ -180,7 +186,7 @@ static int write_all(int fd,const char *data,size_t len)
 }
 static int save(const char *root,cJSON *doc)
 {
-  char p[512],tmp[512],digest[9],*rows_text=NULL,*body=NULL;int fd=-1,ret=3;
+  char p[512],tmp[512]={0},digest[9],*rows_text=NULL,*body=NULL;int fd=-1,ret=3;
   size_t len;
   rows_text=cJSON_PrintUnformatted(get(doc,"tasks"));
   if(!rows_text)return 3;
@@ -202,7 +208,7 @@ static int save(const char *root,cJSON *doc)
   ret=0;
 done:
   if(fd>=0)close(fd);
-  if(ret)unlink(tmp);
+  if(ret&&tmp[0])unlink(tmp);
   cJSON_free(body);
   return ret;
 }
@@ -275,27 +281,26 @@ static int command_note(cJSON *doc,const char *command_id,const char *kind,const
 }
 
 /* ---------- plan ---------- */
-static int auto_assign(struct plan_task *plan,int count)
+static int auto_assign(struct plan_task *plan,int count,const cJSON *existing)
 {
   sp_problem p;sp_allocation a;char pool[SP_MAX_ROBOTS][8];char free_robots[SP_MAX_ROBOTS][8];
   int pool_n=0,free_n=0,auto_n=0,auto_idx[SP_TASK_CAPACITY],i,k,used=0;
   memset(&p,0,sizeof(p));
-  for(i=0;i<count;i++)if(strcmp(plan[i].robot,"AUTO")){
-    int r,dup=0;
-    for(r=0;r<pool_n;r++)if(!strcmp(pool[r],plan[i].robot))dup=1;
-    if(!dup){if(pool_n>=SP_MAX_ROBOTS)return -1;snprintf(pool[pool_n],sizeof(pool[0]),"%s",plan[i].robot);pool_n++;}
-  }
-  if(pool_n==0){
-    if(count>3)return -1;
-    snprintf(pool[0],sizeof(pool[0]),"S1");snprintf(pool[1],sizeof(pool[1]),"S2");
-    snprintf(pool[2],sizeof(pool[2]),"S3");pool_n=3;
-  }
+  /* Simulation candidate set is always the three configured vehicles;
+     explicit assignments consume slots, they do not define the whole pool. */
+  snprintf(pool[0],sizeof(pool[0]),"S1");snprintf(pool[1],sizeof(pool[1]),"S2");
+  snprintf(pool[2],sizeof(pool[2]),"S3");pool_n=3;
   for(i=0;i<count;i++)if(!strcmp(plan[i].robot,"AUTO"))auto_idx[auto_n++]=i;
   if(!auto_n)return 0;
   if(auto_n>SP_MAX_TAGS)return -1;
   for(k=0;k<pool_n;k++){
-    int taken=0;
+    int taken=0;const cJSON *row;
     for(i=0;i<count;i++)if(!strcmp(plan[i].robot,pool[k]))taken=1;
+    /* Existing pending or in-flight ownership also consumes a robot. */
+    cJSON_ArrayForEach(row,existing){
+      const char *robot=text_of(row,"robot_id"),*state=text_of(row,"state");
+      if(robot&&state&&!strcmp(robot,pool[k])&&!is_terminal(state))taken=1;
+    }
     if(!taken)memcpy(free_robots[free_n++],pool[k],sizeof(free_robots[0]));
   }
   if(auto_n>free_n)return -1;
@@ -321,12 +326,13 @@ int sp_task_plan_apply(const char *root,const char *json,char **reply)
   static const char *const task_keys[]={"task_id","tag_id","robot_id","revision","priority"};
   struct plan_task *plan=NULL;int count=0,i,ret=3,fd=-1,status_bad=0,invalid=0;
   cJSON *doc=NULL,*tasks=NULL,*ledger=NULL,*rows=NULL,*o=NULL;
-  const char *plan_id,*status="REJECTED";long version=0,stored=0;
+  const char *plan_id,*status="REJECTED";char *plan_body=NULL;long version=0,stored=0;
 #define REJECT do{invalid=1;goto done;}while(0)
   if(reply)*reply=NULL;
   if(!json||strlen(json)>8192||!sp_json_bounded(json))return 2;
   doc=cJSON_Parse(json);
   if(!doc||duplicate_key(doc)||keys_within(doc,plan_keys,4))REJECT;
+  plan_body=cJSON_PrintUnformatted(doc);if(!plan_body)goto done;
   if(!cJSON_IsString(get(doc,"schema"))||strcmp(get(doc,"schema")->valuestring,"spine-plan-v1"))REJECT;
   plan_id=text_of(doc,"plan_id");
   if(!id_ok(plan_id)||number_of(doc,"version",1,INT_MAX,&version))REJECT;
@@ -338,11 +344,16 @@ int sp_task_plan_apply(const char *root,const char *json,char **reply)
   if(!plan)goto done;
   for(i=0;i<count;i++){
     cJSON *item=cJSON_GetArrayItem(tasks,i);const char *tid,*tag,*robot;long rev,prio=50;int j;
+    char command_id[104];
     if(!cJSON_IsObject(item)||duplicate_key(item)||keys_within(item,task_keys,5))REJECT;
     tid=text_of(item,"task_id");tag=text_of(item,"tag_id");robot=text_of(item,"robot_id");
     if(!id_ok(tid)||!id_ok(tag)||!robot)REJECT;
     if(strcmp(robot,"AUTO")&&robot_index(robot)<0)REJECT;
     if(number_of(item,"revision",1,INT_MAX,&rev))REJECT;
+    /* Both generated protocol IDs must fit the same 64-byte identifier
+       limit enforced by the simulator and persisted command ledger. */
+    if(snprintf(command_id,sizeof(command_id),"assign-%s-%ld",tid,rev)<0 ||
+       !id_ok(command_id))REJECT;
     if(get(item,"priority")&&number_of(item,"priority",1,1000,&prio))REJECT;
     snprintf(plan[i].task_id,sizeof(plan[i].task_id),"%s",tid);
     snprintf(plan[i].tag_id,sizeof(plan[i].tag_id),"%s",tag);
@@ -350,11 +361,6 @@ int sp_task_plan_apply(const char *root,const char *json,char **reply)
     plan[i].revision=rev;plan[i].priority=prio;
     for(j=0;j<i;j++)
       if(!strcmp(plan[j].task_id,plan[i].task_id)||!strcmp(plan[j].tag_id,plan[i].tag_id))REJECT;
-  }
-  if(auto_assign(plan,count))REJECT;
-  for(i=0;i<count;i++){
-    int j;
-    for(j=0;j<i;j++)if(!strcmp(plan[j].robot,plan[i].robot))REJECT;
   }
   fd=lock_ledger(root);
   if(fd<0)goto done;
@@ -365,8 +371,15 @@ int sp_task_plan_apply(const char *root,const char *json,char **reply)
   if(version<stored){status="STALE_PLAN_REJECTED";status_bad=1;goto response;}
   if(version==stored){
     const char *prior=text_of(ledger,"plan_id");
-    if(!prior||strcmp(prior,plan_id)){status="PLAN_VERSION_CONFLICT";status_bad=1;goto response;}
+    const char *prior_body=text_of(ledger,"plan_body");
+    if(!prior||strcmp(prior,plan_id)||!prior_body||strcmp(prior_body,plan_body)){
+      status="PLAN_VERSION_CONFLICT";status_bad=1;goto response;}
     status="DUPLICATE_PLAN";goto response;
+  }
+  if(auto_assign(plan,count,rows))REJECT;
+  for(i=0;i<count;i++){
+    int j;
+    for(j=0;j<i;j++)if(!strcmp(plan[j].robot,plan[i].robot))REJECT;
   }
   for(i=0;i<count;i++){
     cJSON *row=find_task(rows,plan[i].task_id);
@@ -412,7 +425,9 @@ int sp_task_plan_apply(const char *root,const char *json,char **reply)
   }
   cJSON_DeleteItemFromObjectCaseSensitive(ledger,"plan_id");
   cJSON_DeleteItemFromObjectCaseSensitive(ledger,"plan_version");
+  cJSON_DeleteItemFromObjectCaseSensitive(ledger,"plan_body");
   if(!cJSON_AddStringToObject(ledger,"plan_id",plan_id)||
+     !cJSON_AddStringToObject(ledger,"plan_body",plan_body)||
      !cJSON_AddNumberToObject(ledger,"plan_version",(double)version))goto done;
   if(save(root,ledger))goto done;
   status="PLAN_PERSISTED";
@@ -422,7 +437,8 @@ response:
   if(!cJSON_AddStringToObject(o,"status",status)||
      !cJSON_AddStringToObject(o,"plan_id",plan_id)||
      !cJSON_AddNumberToObject(o,"plan_version",(double)version)||
-     !cJSON_AddNumberToObject(o,"stored_plan_version",(double)stored)||
+     !cJSON_AddNumberToObject(o,"previous_plan_version",(double)stored)||
+     !cJSON_AddNumberToObject(o,"stored_plan_version",(double)(!strcmp(status,"PLAN_PERSISTED")?version:stored))||
      !cJSON_AddBoolToObject(o,"motion",0)||
      !cJSON_AddStringToObject(o,"ack_scope","LOCAL_STORAGE_ONLY")||
      !cJSON_AddItemToObject(o,"tasks",brief_all(rows))){
@@ -438,7 +454,7 @@ done:
        cJSON_AddBoolToObject(o,"motion",0))ret=finish(o,reply,2);
     else{cJSON_Delete(o);o=NULL;ret=3;}
   }else if(o)ret=finish(o,reply,ret);
-  free(plan);cJSON_Delete(ledger);cJSON_Delete(doc);
+  free(plan);cJSON_free(plan_body);cJSON_Delete(ledger);cJSON_Delete(doc);
   return ret;
 }
 
@@ -460,20 +476,22 @@ static int request_body(char *out,size_t size,const struct dispatch_item *it,con
    reports the exact (task, robot, revision) it was asked about. */
 static int ack_state_is(const char *response,const struct dispatch_item *it,const char *want,long *sequence)
 {
-  cJSON *o,*t;int ok=-1;const char *st;
-  o=cJSON_Parse(response);
+  cJSON *o,*t;int ok=-1;const char *st;long revision;
+  o=cJSON_ParseWithOpts(response,NULL,1);
   if(!o)return -1;
   if(duplicate_key(o))goto done;
   t=get(o,"task");
   st=text_of(t,"state");
+  if(!text_of(o,"schema")||strcmp(text_of(o,"schema"),"spine-robot-sim-v1")||
+     !text_of(o,"command_id")||strcmp(text_of(o,"command_id"),it->command_id))goto done;
   if(!cJSON_IsTrue(get(o,"persisted"))||!cJSON_IsFalse(get(o,"motion")))goto done;
   if(!text_of(o,"ack_scope")||strcmp(text_of(o,"ack_scope"),"SIMULATOR_STORAGE_ONLY"))goto done;
-  if(!cJSON_IsObject(t))goto done;
+  if(!cJSON_IsObject(t)||duplicate_key(t))goto done;
   if(!text_of(t,"task_id")||strcmp(text_of(t,"task_id"),it->task_id))goto done;
   if(!text_of(t,"robot_id")||strcmp(text_of(t,"robot_id"),it->robot))goto done;
-  if(!cJSON_IsNumber(get(t,"revision"))||(long)get(t,"revision")->valueint!=it->revision)goto done;
+  if(number_of(t,"revision",1,INT_MAX,&revision)||revision!=it->revision)goto done;
   if(!st||strcmp(st,want))goto done;
-  if(sequence&&cJSON_IsNumber(get(t,"sequence")))*sequence=(long)get(t,"sequence")->valueint;
+  if(sequence&&number_of(t,"sequence",1,INT_MAX,sequence))goto done;
   ok=0;
 done:
   cJSON_Delete(o);
@@ -585,7 +603,7 @@ static int risk_linkage(const char *root,const char *endpoint,cJSON *stopped)
 
 int sp_task_dispatch(const char *root,const char *endpoint,char **reply)
 {
-  struct dispatch_item *items=NULL;unsigned char busy[SP_MAX_ROBOTS];int count=0,i,ret=0,net=0,fd=-1,code=0;
+  struct dispatch_item *items=NULL;unsigned char busy[SP_MAX_ROBOTS];int count=0,i,ret=0,net=0,local_error=0,fd=-1,code=0;
   cJSON *ledger=NULL,*rows=NULL,*o=NULL,*arr=NULL,*row,*stops=NULL;const char *status;
   if(reply)*reply=NULL;
   if(!sp_http_endpoint_valid(endpoint))return 2;
@@ -623,16 +641,16 @@ int sp_task_dispatch(const char *root,const char *endpoint,char **reply)
   for(i=0;i<count;i++){
     char body[512],resp[4096];int level=0,r=robot_index(items[i].robot);
     if(items[i].frozen){items[i].outcome=!strncmp(items[i].note,"HELD_BY_RISK",12)?2:3;continue;}
-    if(sp_store_tag_risk(root,items[i].tag_id,&level)){items[i].outcome=7;continue;}
+    if(sp_store_tag_risk(root,items[i].tag_id,&level)){items[i].outcome=7;local_error=1;continue;}
     if(level>0){
-      if(set_note(root,&items[i],level==2?"HELD_BY_RISK":"HELD_HUMAN_REVIEW",NULL)){items[i].outcome=7;continue;}
+      if(set_note(root,&items[i],level==2?"HELD_BY_RISK":"HELD_HUMAN_REVIEW",NULL)){items[i].outcome=7;local_error=1;continue;}
       items[i].outcome=(level==2)?2:3;items[i].frozen=1;continue;
     }
     if(r>=0&&busy[r]){items[i].outcome=4;continue;}
-    if(request_body(body,sizeof(body),&items[i],"ASSIGN")){items[i].outcome=7;continue;}
+    if(request_body(body,sizeof(body),&items[i],"ASSIGN")){items[i].outcome=7;local_error=1;continue;}
     if(sp_http_exchange(endpoint,"POST","/v1/commands",body,resp,sizeof(resp))){items[i].outcome=5;net=1;continue;}
-    if(ack_state_is(resp,&items[i],"ACCEPTED",NULL)){items[i].outcome=6;continue;}
-    if(mark_dispatched(root,&items[i],body)){items[i].outcome=7;continue;}
+    if(ack_state_is(resp,&items[i],"ACCEPTED",NULL)){items[i].outcome=6;net=1;continue;}
+    if(mark_dispatched(root,&items[i],body)){items[i].outcome=7;local_error=1;continue;}
     items[i].outcome=1;
     if(r>=0)busy[r]=1;
   }
@@ -649,17 +667,23 @@ int sp_task_dispatch(const char *root,const char *endpoint,char **reply)
        !cJSON_AddBoolToObject(e,"dispatched",items[i].outcome==1)||
        !cJSON_AddItemToArray(arr,e)){cJSON_Delete(e);cJSON_Delete(o);cJSON_Delete(arr);free(items);return 3;}
   }
-  status=count?(net?"PARTIAL_NETWORK_ERROR":"DISPATCH_STEP"):
+  status=count?(local_error?"PARTIAL_STORAGE_ERROR":net?"PARTIAL_NETWORK_ERROR":"DISPATCH_STEP"):
          (cJSON_GetArraySize(stops)?"RISK_STOPPED":"NOTHING_TO_DISPATCH");
   if(!cJSON_AddStringToObject(o,"status",status)||
      !cJSON_AddStringToObject(o,"ack_scope","REMOTE_STORAGE_ONLY")||
      !cJSON_AddBoolToObject(o,"motion",0)||
-     !cJSON_AddNumberToObject(o,"task_count",count)||
-     !cJSON_AddItemToObject(o,"tasks",arr)||
-     !cJSON_AddItemToObject(o,"stops",stops)){
-    cJSON_Delete(o);cJSON_Delete(arr);free(items);return 3;
+     !cJSON_AddNumberToObject(o,"task_count",count)){
+    cJSON_Delete(o);cJSON_Delete(arr);cJSON_Delete(stops);free(items);return 3;
   }
-  ret=net?4:0;
+  if(!cJSON_AddItemToObject(o,"tasks",arr)){
+    cJSON_Delete(o);cJSON_Delete(arr);cJSON_Delete(stops);free(items);return 3;
+  }
+  arr=NULL;
+  if(!cJSON_AddItemToObject(o,"stops",stops)){
+    cJSON_Delete(o);cJSON_Delete(stops);free(items);return 3;
+  }
+  stops=NULL;
+  ret=local_error?3:net?4:0;
   free(items);
   return finish(o,reply,ret);
 }
@@ -678,14 +702,30 @@ int sp_task_poll(const char *root,const char *endpoint,char **reply)
 {
   static const char *const forward[]={"RUNNING","BLOCKED","COMPLETED","FAILED","STOP_CONFIRMED"};
   char resp[4096];cJSON *state_doc=NULL,*vehicles=NULL,*ledger=NULL,*rows=NULL,*o=NULL,*arr=NULL,*row;
-  int fd=-1,ret=0,changed=0;
+  int fd=-1,ret=3,changed=0;
   if(reply)*reply=NULL;
   if(!sp_http_endpoint_valid(endpoint))return 2;
   if(sp_http_exchange(endpoint,"GET","/v1/state","",resp,sizeof(resp)))return 4;
-  state_doc=cJSON_Parse(resp);
-  if(!state_doc||duplicate_key(state_doc)){cJSON_Delete(state_doc);return 4;}
+  state_doc=cJSON_ParseWithOpts(resp,NULL,1);
+  if(!cJSON_IsObject(state_doc)||duplicate_key(state_doc)||
+     !text_of(state_doc,"schema")||strcmp(text_of(state_doc,"schema"),"spine-robot-sim-v1")||
+     !text_of(state_doc,"source")||strcmp(text_of(state_doc,"source"),"PC_NETWORK_SIMULATOR")||
+     !cJSON_IsFalse(get(state_doc,"motion"))){cJSON_Delete(state_doc);return 4;}
   vehicles=get(state_doc,"tasks");
-  if(!cJSON_IsArray(vehicles)){cJSON_Delete(state_doc);return 4;}
+  if(!cJSON_IsArray(vehicles)||cJSON_GetArraySize(vehicles)>SP_MAX_ROBOTS){cJSON_Delete(state_doc);return 4;}
+  cJSON_ArrayForEach(row,vehicles){
+    long rev,sequence;const char *robot=text_of(row,"robot_id");cJSON *prior;
+    if(!cJSON_IsObject(row)||duplicate_key(row)||!id_ok(text_of(row,"task_id"))||
+       !robot||robot_index(robot)<0||number_of(row,"revision",1,INT_MAX,&rev)||
+       number_of(row,"sequence",0,INT_MAX,&sequence)||!text_of(row,"state")){
+      cJSON_Delete(state_doc);return 4;
+    }
+    cJSON_ArrayForEach(prior,vehicles){
+      if(prior==row)break;
+      if(!strcmp(text_of(prior,"task_id"),text_of(row,"task_id"))||
+         !strcmp(text_of(prior,"robot_id"),robot)){cJSON_Delete(state_doc);return 4;}
+    }
+  }
   fd=lock_ledger(root);
   if(fd<0){cJSON_Delete(state_doc);return 3;}
   ledger=load(root);
@@ -752,8 +792,7 @@ int sp_task_poll(const char *root,const char *endpoint,char **reply)
 done:
   if(fd>=0)close(fd);
   cJSON_Delete(o);cJSON_Delete(arr);cJSON_Delete(ledger);cJSON_Delete(state_doc);
-  if(ret==0)return 0;
-  return 3;
+  return ret;
 }
 
 /* ---------- stop ---------- */
@@ -800,6 +839,13 @@ int sp_task_stop(const char *root,const char *task_id,const char *reason,char **
   }
 done:
   if(fd>=0)close(fd);
+  if(ledger&&!row){
+    o=cJSON_CreateObject();
+    if(o&&cJSON_AddStringToObject(o,"status","TASK_NOT_FOUND")&&
+       cJSON_AddStringToObject(o,"task_id",task_id)&&
+       cJSON_AddBoolToObject(o,"motion",0))ret=finish(o,reply,2);
+    else {cJSON_Delete(o);ret=3;}
+  }
   if(ledger&&row){
     o=cJSON_CreateObject();
     if(!o){cJSON_Delete(ledger);return 3;}
@@ -815,21 +861,22 @@ done:
   cJSON_Delete(ledger);
   return ret;
 }
-static int mark_stop_confirmed(const char *root,const struct dispatch_item *it,const char *body)
+static int mark_stop_confirmed(const char *root,const struct dispatch_item *it,const char *body,long seq)
 {
   int fd=lock_ledger(root),ret=3;cJSON *ledger,*row;
   if(fd<0)return 3;
   ledger=load(root);
   if(!ledger){close(fd);return 3;}
   row=find_task(get(ledger,"tasks"),it->task_id);
-  if(row&&text_of(row,"state")&&!strcmp(text_of(row,"state"),"STOP_REQUESTED")){
-    char seqbuf[24];
-    snprintf(seqbuf,sizeof(seqbuf),"%d",get(row,"sequence")->valueint);
+  if(row&&text_of(row,"state")&&!strcmp(text_of(row,"state"),"STOP_REQUESTED")&&
+     seq>(long)get(row,"sequence")->valueint){
     cJSON_DeleteItemFromObjectCaseSensitive(row,"state");
     cJSON_DeleteItemFromObjectCaseSensitive(row,"vehicle_state");
+    cJSON_DeleteItemFromObjectCaseSensitive(row,"sequence");
     cJSON_DeleteItemFromObjectCaseSensitive(row,"note");
     if(!cJSON_AddStringToObject(row,"state","STOP_CONFIRMED")||
        !cJSON_AddStringToObject(row,"vehicle_state","STOP_CONFIRMED")||
+       !cJSON_AddNumberToObject(row,"sequence",(double)seq)||
        !cJSON_AddStringToObject(row,"note","EXECUTOR_CONFIRMED_STOP")||
        command_note(ledger,it->command_id,"STOP",body,"ACKNOWLEDGED"))goto done;
     if(save(root,ledger))goto done;
@@ -841,7 +888,7 @@ done:
 }
 int sp_task_stop_sync(const char *root,const char *endpoint,char **reply)
 {
-  struct dispatch_item *items=NULL;int count=0,i,ret=0,net=0,fd=-1;
+  struct dispatch_item *items=NULL;int count=0,i,ret=0,net=0,invalid_ack=0,local_error=0,fd=-1;
   cJSON *ledger=NULL,*rows=NULL,*o=NULL,*arr=NULL,*row;
   if(reply)*reply=NULL;
   if(!sp_http_endpoint_valid(endpoint))return 2;
@@ -860,16 +907,18 @@ int sp_task_stop_sync(const char *root,const char *endpoint,char **reply)
     snprintf(items[count].robot,sizeof(items[count].robot),"%s",text_of(row,"robot_id"));
     snprintf(items[count].command_id,sizeof(items[count].command_id),"%s",text_of(row,"stop_id"));
     items[count].revision=(long)get(row,"revision")->valueint;
+    items[count].sequence=(long)get(row,"sequence")->valueint;
     count++;
   }
   close(fd);fd=-1;cJSON_Delete(ledger);ledger=NULL;
   for(i=0;i<count;i++){
     char body[512],resp[4096];long seq=0;
-    if(!id_ok(items[i].command_id)){items[i].outcome=7;continue;}
-    if(request_body(body,sizeof(body),&items[i],"STOP")){items[i].outcome=7;continue;}
+    if(!id_ok(items[i].command_id)){items[i].outcome=7;local_error=1;continue;}
+    if(request_body(body,sizeof(body),&items[i],"STOP")){items[i].outcome=7;local_error=1;continue;}
     if(sp_http_exchange(endpoint,"POST","/v1/commands",body,resp,sizeof(resp))){items[i].outcome=5;net=1;continue;}
-    if(ack_state_is(resp,&items[i],"STOP_CONFIRMED",&seq)){items[i].outcome=6;continue;}
-    if(mark_stop_confirmed(root,&items[i],body)){items[i].outcome=7;continue;}
+    if(ack_state_is(resp,&items[i],"STOP_CONFIRMED",&seq)){items[i].outcome=6;invalid_ack=1;continue;}
+    if(seq<=items[i].sequence){items[i].outcome=6;invalid_ack=1;continue;}
+    if(mark_stop_confirmed(root,&items[i],body,seq)){items[i].outcome=7;local_error=1;continue;}
     items[i].outcome=1;
   }
   o=cJSON_CreateObject();arr=cJSON_CreateArray();
@@ -882,12 +931,13 @@ int sp_task_stop_sync(const char *root,const char *endpoint,char **reply)
        !cJSON_AddBoolToObject(e,"executor_confirmed",items[i].outcome==1)||
        !cJSON_AddItemToArray(arr,e)){cJSON_Delete(e);cJSON_Delete(o);cJSON_Delete(arr);free(items);return 3;}
   }
-  if(!cJSON_AddStringToObject(o,"status",count?(net?"PARTIAL_NETWORK_ERROR":"STOP_SYNC_STEP"):"NOTHING_TO_SYNC")||
+  if(!cJSON_AddStringToObject(o,"status",count?(local_error?"PARTIAL_STORAGE_ERROR":
+       (net||invalid_ack)?"PARTIAL_NETWORK_ERROR":"STOP_SYNC_STEP"):"NOTHING_TO_SYNC")||
      !cJSON_AddBoolToObject(o,"motion",0)||
      !cJSON_AddItemToObject(o,"tasks",arr)){
     cJSON_Delete(o);cJSON_Delete(arr);free(items);return 3;
   }
-  ret=net?4:0;
+  ret=local_error?3:(net||invalid_ack)?4:0;
   free(items);
   return finish(o,reply,ret);
 }

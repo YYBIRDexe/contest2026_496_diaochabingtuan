@@ -4,6 +4,7 @@
 #include "native/watch.h"
 #include "native/human.h"
 #include "native/task.h"
+#include "native/task_watch.h"
 #include "agent_adapter/task_tools.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +25,12 @@ int main(int argc, char **argv)
   int threshold;
   const char *decision[] = {"AUTO", "HUMAN_REVIEW", "IMMEDIATE_HUMAN"};
   if(argc==2 && !strcmp(argv[1],"--service"))return sp_service();
+  if(argc==2 && !strcmp(argv[1],"--task-service"))return sp_task_service();
+  if((argc==4||argc==5) && !strcmp(argv[1],"--task-watch")) {
+    int cycles=0;
+    if(argc==5&&parse(argv[4],1,10000,&cycles))return 2;
+    return sp_task_watch(argv[2],argv[3],(unsigned)cycles);
+  }
   if(argc==3 && !strcmp(argv[1],"--pending")) return sp_store_pending(argv[2]);
   if(argc==4 && !strcmp(argv[1],"--deliver")) return sp_store_deliver(argv[2],argv[3]);
   if((argc==4 || argc==5) && !strcmp(argv[1],"--watch")) {

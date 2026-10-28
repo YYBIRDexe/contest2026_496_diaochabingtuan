@@ -1,6 +1,6 @@
 # 三车网络模拟协议 v2
 
-2026-10-26：端侧任务接口的主机参考实现，v2 在 v1 上加入执行器停止动作与 STOP_CONFIRMED 终态，用于配合 Gemini 原生 C 任务账本（`native/task.c`）。仅监听 127.0.0.1，没有身份认证、真实导航或板端接入。所有输入必须 `mode=simulation`，ACK 只代表 PC SQLite 提交；禁止据此显示真车完成。S1 左岸、S2 右岸、S3 机房是默认展示角色，协议不把区域硬编码为可达性证明。
+端侧任务接口的 PC 模拟实现，v2 加入执行器停止动作与 STOP_CONFIRMED 终态，用于配合 Gemini 原生 C 任务账本（`native/task.c`）。模拟器自身仅监听 127.0.0.1；可通过 `board_sim_network` 限定源 IP 的转发供真板连接。已进行真板与模拟器测试；没有真实导航或真实车端认证。所有输入必须 `mode=simulation`，ACK 只代表 PC SQLite 提交；禁止据此显示真车完成。S1 左岸、S2 右岸、S3 机房是默认展示角色，协议不把区域硬编码为可达性证明。
 
 ## 运行
 
@@ -16,7 +16,7 @@ python -m unittest discover -s tests -p test_robot_simulator.py -v
 
 ## HTTP 和消息
 
-POST /v1/commands，JSON 最多 4096 字节，拒绝重复键、未知字段及非法值。GET /v1/state 读取当前状态。三辆逻辑车共享一个测试端点，并非三个真实车端进程。
+POST /v1/commands，JSON 最多 4096 字节，拒绝重复键、未知字段及非法值。GET /v1/state 返回每辆车最近的一条任务状态（最多三条），历史任务仍保存在 SQLite；这样状态消息不会随历史增长而超过当前 Gemini HTTP 2 KB 响应上限。三辆逻辑车共享一个测试端点，并非三个真实车端进程。对于同一辆车，模拟器在已有非终态任务时拒绝新分配，指挥端也不得在旧任务未确认终结时重复授权。
 
 分配：
 
@@ -42,12 +42,12 @@ ACCEPTED→RUNNING→COMPLETED；RUNNING 可进入 BLOCKED，BLOCKED 只能恢�
 
 HTTP200 返回 persisted=true、ack_scope=SIMULATOR_STORAGE_ONLY、motion=false 及命令生效时的任务快照。相同 command_id 和正文重试返回原应答；历史 ACK 不是实时状态，要查询 /state。同 ID 不同正文 409；业务冲突 409 且 persisted=false；注入离线或存储失败 503，不得当完成或释放任务。SQLite 事务提交后才允许发 ACK。
 
-task_id 全局唯一，首次 revision=1；仅终态允许下一版本（严格+1）再分配。非终态任务只有一个 robot_id，单车同时最多一个非终态任务（STOP_CONFIRMED 也释放车辆）。旧版本/错误车辆回报不能更新新版。数据库重开保留命令去重和任务，离线注入属于测试配置，不保存为业务状态。
+task_id 全局唯一，首次 revision=1；仅终态允许下一版本（严格+1）再分配。板端自动生成的 `assign-任务ID-版本` 必须不超过 64 字节，故版本为 1 时任务 ID 最多 55 字节，版本位数增加时可用长度相应减少。源码已新增计划落盘前的检查；**当前板端尚未部署该修复，客户端必须先自行遵守限制**。非终态任务只有一个 robot_id，单车同时最多一个非终态任务（STOP_CONFIRMED 也释放车辆）。旧版本/错误车辆回报不能更新新版。数据库重开保留命令去重和任务，离线注入属于测试配置，不保存为业务状态。
 
 ## 与板端账本的关系
 
-`native/task.c`（主机可编译、板端待部署）通过本协议派单与收账：POST /v1/commands 的 ASSIGN/STOP、GET /v1/state 的实时状态。板端只在收到 `persisted=true` 且 `state=ACCEPTED` 后才把任务记为 DISPATCHED，ACCEPTED 不是完成；收到 STOP_CONFIRMED 才把任务记为停止完成并释放归属。协议细节与账本状态机见 `BOARD-TASK-PROTOCOL.md`。
+`native/task.c` 已在真板部署，通过本协议派单与收账：POST /v1/commands 的 ASSIGN/STOP、GET /v1/state 的实时状态。板端只在收到 `persisted=true` 且 `state=ACCEPTED` 后才把任务记为 DISPATCHED，ACCEPTED 不是完成；收到 STOP_CONFIRMED 才把任务记为停止完成并释放归属。协议细节与账本状态机见 `BOARD-TASK-PROTOCOL.md`。
 
 ## 边界与下一步
 
-本轮只验证网络协议、模拟器与主机版 C 账本。尚未在真板部署账本，也没有设备认证、心跳超时、租约、区域禁入和车端安全停车；真实车端接入还须设备身份、独立连接、新鲜度和物理执行验证。断线保留归属，不能凭超时自动改派。SQLite 命令历史目前不清理，仅用于有限验收回放；长期服务需要容量策略。
+目前验证包括真板、PC 模拟器和隔离模拟平台；没有真实车端认证、心跳超时、租约或物理安全停车验证。真实车端接入还须设备身份、独立连接、新鲜度和物理执行验证。断线保留归属，不能凭超时自动改派。SQLite 命令历史目前不清理，仅用于有限验收回放；长期服务需要容量策略。

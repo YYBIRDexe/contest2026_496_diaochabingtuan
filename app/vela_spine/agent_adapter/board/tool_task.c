@@ -24,7 +24,7 @@
 #  define SPINE_TASK_ROOT "/data/ai_agent/sp"
 #endif
 #ifndef SPINE_TASK_ENDPOINT_FILE
-#  define SPINE_TASK_ENDPOINT_FILE SPINE_TASK_ROOT "/endpoint.txt"
+#  define SPINE_TASK_ENDPOINT_FILE SPINE_TASK_ROOT "/task-end.txt"
 #endif
 #ifndef ERROR
 #  define ERROR -1

@@ -1,6 +1,6 @@
 # 板端任务账本协议 v1（spine-plan-v1）
 
-2026-10-26：这是端侧任务闭环的板端契约。实现位于 `native/task.c` / `native/task.h`，与事件账本 `native/store.c` 并列但互不替代。主机已可编译并全量测试通过；**真板尚未部署，本文所述板端行为以主机同源二进制验证**（证据标注 board_verified=false）。
+这是端侧任务闭环的板端契约。实现位于 `native/task.c` / `native/task.h`，与事件账本 `native/store.c` 并列但互不替代。2026-10-28 已在真实 Gemini-S1 与 PC 模拟三车验证派单、风险停止、人工闭环、断网和重启。本文所述车辆均为模拟，不代表真实车辆运行。
 
 ## 三段接口
 
@@ -23,7 +23,7 @@
 
 - 键集严格：顶层 `{schema,plan_id,version,tasks}`，任务 `{task_id,tag_id,robot_id,revision}` 加可选 `priority`；未知键或重复键整单拒绝。
 - `task_id`/`tag_id` 单次计划内不得重复；显式 `robot_id` 不得重复；`robot_id` 允许 `AUTO`，由 `sp_allocate` 在“未被显式占用”的机器人池里求解，解不出则整单拒绝（不做半截分配）。
-- 版本：`version < stored` → `STALE_PLAN_REJECTED`；`==` 且 `plan_id` 不同 → `PLAN_VERSION_CONFLICT`；`==` 且计划相同 → `DUPLICATE_PLAN`（幂等，不重复派单）；`>` 才写入。
+- 版本：`version < stored` → `STALE_PLAN_REJECTED`；`==` 且计划 ID 或内容不同 → `PLAN_VERSION_CONFLICT`；`==` 且计划相同 → `DUPLICATE_PLAN`（幂等，不重复派单）；`>` 才写入。
 - 任务版本：新任务必须 `revision=1`；已终态任务重派必须 `revision=旧+1`；非终态任务再次授权 → `DOUBLE_AUTHORIZATION_REJECTED`（同一任务不会获得双重授权）。
 
 ## 账本文件
@@ -62,8 +62,8 @@ PENDING --派单成功--> DISPATCHED --回执--> RUNNING/BLOCKED --> COMPLETED/F
 | `--task-stop-sync ROOT ENDPOINT` | 发送 STOP 并等执行器确认：`STOP_CONFIRMED` 才转终态 |
 | `--task-view ROOT [TASK_ID]` | 读账本 |
 
-退出码：`0` 成功；`2` 参数或计划校验失败（未产生任何状态变化）；`3` 账本损坏/存储失败（原文件保留）；`4` 网络失败（本地状态不变）。所有应答都带 `motion:false`；派单类应答带 `ack_scope=REMOTE_STORAGE_ONLY`，账本类应答带 `ack_scope=LOCAL_STORAGE_ONLY`。
+退出码：`0` 成功；`2` 参数或计划校验失败（未产生任何状态变化）；`3` 账本损坏或存储失败；`4` 网络或回执校验失败。批量操作可能在某一项失败前已成功处理其他项；执行器可能已经接收，而本地持久化尚未成功，必须逐项核对并使用原命令 ID 幂等重试，不能把非零返回理解为“什么都没发生”。源码已修复部分保存失败误报成功的路径，当前真板尚未部署该修复。所有应答都带 `motion:false`；派单类应答带 `ack_scope=REMOTE_STORAGE_ONLY`，账本类应答带 `ack_scope=LOCAL_STORAGE_ONLY`。
 
 ## 未实现（红线）
 
-板端部署、设备身份认证与签名、心跳/租约、区域禁入、车端物理安全停车、真实导航或运动、云端完整协商与自动重规划均未实现。派单成功只证明模拟器持久化接收，`board_verified=false`、`physical_execution=false`，不得据此声称车辆已运动或任务已完成。
+设备身份认证与签名、心跳/租约、区域禁入、车端物理安全停车、真实导航或运动、云端完整协商与自动重规划均未验证。AUTO 当前采用模拟的等成本、等资格和每车一个任务配额；不是实际电量、能耗或可达性验证。派单成功只证明模拟器持久化接收，不得据此声称真实车辆已运动或任务已完成。

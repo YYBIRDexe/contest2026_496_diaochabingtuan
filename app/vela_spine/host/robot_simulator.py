@@ -92,6 +92,19 @@ class Fleet:
                     "motion": False, "offline": sorted(self.offline),
                     "tasks": [dict(r) for r in db.execute("SELECT * FROM tasks ORDER BY task_id")]}
 
+    def current_snapshot(self):
+        """One latest task per robot; historical rows remain in SQLite.
+
+        A robot can have only one nonterminal task. The board can therefore
+        reconcile the current task without receiving an unbounded history.
+        """
+        with self.lock, self.connect() as db:
+            rows=db.execute("""SELECT t.* FROM tasks t WHERE t.rowid =
+                (SELECT MAX(x.rowid) FROM tasks x WHERE x.robot_id=t.robot_id)
+                ORDER BY t.robot_id""")
+            return {"schema":SCHEMA,"source":"PC_NETWORK_SIMULATOR","motion":False,
+                    "offline":sorted(self.offline),"tasks":[dict(r) for r in rows]}
+
     def apply(self, message):
         validate(message)
         body = json.dumps(message, sort_keys=True, separators=(",", ":"))
@@ -156,7 +169,7 @@ def make_server(fleet, port=0):
             self.wfile.write(raw)
 
         def do_GET(self):
-            self.reply(200, fleet.snapshot()) if self.path == "/v1/state" else self.reply(404, {"error": "not found"})
+            self.reply(200, fleet.current_snapshot()) if self.path == "/v1/state" else self.reply(404, {"error": "not found"})
 
         def do_POST(self):
             self.connection.settimeout(3)

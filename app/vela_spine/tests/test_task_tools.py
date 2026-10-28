@@ -117,6 +117,22 @@ class TaskTools(unittest.TestCase):
         self.assertEqual(self.tool('task_status', {'task_id': 'T1'})['result']['tasks'][0]['state'],
                          'STOP_CONFIRMED')
 
+    def test_stop_missing_with_executor_preserves_error(self):
+        self.submit()
+        result = self.tool('task_stop', {'task_id': 'missing'}, endpoint=True, expect=2)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['result']['status'], 'TASK_NOT_FOUND')
+
+    def test_stop_network_failure_keeps_request_pending(self):
+        self.running_task()
+        self.server.shutdown()
+        self.server.server_close()
+        result = self.tool('task_stop', {'task_id': 'T1'}, endpoint=True, expect=4)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['result']['request']['status'], 'STOP_REQUESTED')
+        self.assertEqual(result['result']['executor']['status'], 'PARTIAL_NETWORK_ERROR')
+        self.assertEqual(self.tool('task_status', {'task_id': 'T1'})['result']['tasks'][0]['state'], 'STOP_REQUESTED')
+
     def test_unknown_tool_is_not_answered_as_text(self):
         result = subprocess.run([BIN, '--task-tool', str(self.ledger), 'run_shell', '{"command":"ls"}'],
                                 capture_output=True, text=True)
@@ -127,6 +143,7 @@ class TaskTools(unittest.TestCase):
         self.submit()
         extra = self.tool('task_status', {'task_id': 'T1', 'x': 1}, expect=2)
         self.assertFalse(extra['ok'])
+        self.assertFalse(self.tool('task_status', {'x': 1}, expect=2)['ok'])
         nine = [self.task('T%d' % n, 'D%d' % n, 'S1') for n in range(9)]
         self.assertFalse(self.submit(nine, expect=2)['ok'])
         fast = self.submit([dict(self.task(), speed=3)], expect=2)
