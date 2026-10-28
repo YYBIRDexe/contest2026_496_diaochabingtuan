@@ -143,7 +143,7 @@ static cJSON *load(const char *root)
   n=read(fd,buf,SP_TASK_SNAPSHOT_MAX+1);close(fd);
   if(n<=0||n>(ssize_t)SP_TASK_SNAPSHOT_MAX){free(buf);return NULL;}
   buf[n]=0;
-  if(memchr(buf,0,(size_t)n)||!sp_json_bounded(buf)){free(buf);return NULL;}
+  if(memchr(buf,0,(size_t)n)||strstr(buf,"\\u0000")||!sp_json_bounded(buf)){free(buf);return NULL;}
   doc=cJSON_ParseWithOpts(buf,NULL,1);
   free(buf);
   if(!doc)return NULL;
@@ -330,8 +330,8 @@ int sp_task_plan_apply(const char *root,const char *json,char **reply)
   const char *plan_id,*status="REJECTED";char *plan_body=NULL;long version=0,stored=0;
 #define REJECT do{invalid=1;goto done;}while(0)
   if(reply)*reply=NULL;
-  if(!json||strlen(json)>8192||!sp_json_bounded(json))return 2;
-  doc=cJSON_Parse(json);
+  if(!json||strlen(json)>8192||strstr(json,"\\u0000")||!sp_json_bounded(json))return 2;
+  doc=cJSON_ParseWithOpts(json,NULL,1);
   if(!doc||duplicate_key(doc)||keys_within(doc,plan_keys,4))REJECT;
   plan_body=cJSON_PrintUnformatted(doc);if(!plan_body)goto done;
   if(!cJSON_IsString(get(doc,"schema"))||strcmp(get(doc,"schema")->valuestring,"spine-plan-v1"))REJECT;
@@ -478,6 +478,7 @@ static int request_body(char *out,size_t size,const struct dispatch_item *it,con
 static int ack_state_is(const char *response,const struct dispatch_item *it,const char *want,long *sequence)
 {
   cJSON *o,*t;int ok=-1;const char *st;long revision;
+  if(strstr(response,"\\u0000"))return -1;
   o=cJSON_ParseWithOpts(response,NULL,1);
   if(!o)return -1;
   if(duplicate_key(o))goto done;
@@ -723,10 +724,9 @@ int sp_task_dispatch(const char *root,const char *endpoint,char **reply)
 /* ---------- poll ---------- */
 static const char *next_state(const char *local,const char *vehicle)
 {
-  if(!strcmp(local,"STOP_REQUESTED")){
-    if(!strcmp(vehicle,"STOP_CONFIRMED"))return "STOP_CONFIRMED";
-    return NULL;
-  }
+  /* Only the STOP ACK path checks the current stop_id under ledger lock. */
+  if(!strcmp(vehicle,"STOP_CONFIRMED"))return NULL;
+  if(!strcmp(local,"STOP_REQUESTED"))return NULL;
   return vehicle;
 }
 int sp_task_poll(const char *root,const char *endpoint,char **reply)
@@ -737,6 +737,7 @@ int sp_task_poll(const char *root,const char *endpoint,char **reply)
   if(reply)*reply=NULL;
   if(!sp_http_endpoint_valid(endpoint))return 2;
   if(sp_http_exchange(endpoint,"GET","/v1/state","",resp,sizeof(resp)))return 4;
+  if(strstr(resp,"\\u0000"))return 4;
   state_doc=cJSON_ParseWithOpts(resp,NULL,1);
   if(!cJSON_IsObject(state_doc)||duplicate_key(state_doc)||
      !text_of(state_doc,"schema")||strcmp(text_of(state_doc,"schema"),"spine-robot-sim-v1")||
@@ -778,6 +779,8 @@ int sp_task_poll(const char *root,const char *endpoint,char **reply)
     else{
       vst=text_of(vehicle,"state");
       if(!cJSON_IsNumber(get(vehicle,"sequence")))note="REPORT_MISSING_SEQUENCE";
+      else if(vst&&!strcmp(vst,"STOP_CONFIRMED"))
+        note="STOP_PENDING_EXECUTOR";
       else{
         seq_num=(long)get(vehicle,"sequence")->valueint;
         if(seq_num<lseq)note="STALE_PROGRESS_IGNORED";

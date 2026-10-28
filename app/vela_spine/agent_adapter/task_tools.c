@@ -22,7 +22,7 @@ const char *sp_task_tool_prompt(void)
 static cJSON *parse_object(const char *args,int max_fields)
 {
   cJSON *doc;
-  if(!args)return NULL;
+  if(!args||strstr(args,"\\u0000"))return NULL;
   doc=cJSON_ParseWithOpts(args,NULL,1);
   if(!cJSON_IsObject(doc)||cJSON_GetArraySize(doc)>max_fields){cJSON_Delete(doc);return NULL;}
   return doc;

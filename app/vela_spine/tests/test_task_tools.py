@@ -98,6 +98,12 @@ class TaskTools(unittest.TestCase):
         self.assertEqual(missing['result']['status'], 'TASK_NOT_FOUND')
         self.assertFalse(missing['ok'])
 
+    def test_embedded_nul_cannot_alias_another_task(self):
+        self.submit();before=(self.ledger/'tasks.json').read_bytes()
+        self.tool('task_stop',{'task_id':'T1\x00other'},expect=2)
+        self.assertEqual((self.ledger/'tasks.json').read_bytes(),before)
+        self.tool('task_status',{'task_id':'T1\x00other'},expect=2)
+
     def test_stop_without_executor_only_requests(self):
         self.running_task()
         stopped = self.tool('task_stop', {'task_id': 'T1'})

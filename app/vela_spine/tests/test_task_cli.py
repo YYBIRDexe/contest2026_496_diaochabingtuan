@@ -376,15 +376,21 @@ class TaskLedger(unittest.TestCase):
 
     def test_late_stop_ack_cannot_release_a_new_revision(self):
         self.plan();self.dispatch();self.stop('T1');original=self.fleet.apply
+        advanced = False
         def advance_revision_while_ack_in_flight(message):
+            nonlocal advanced
             response=original(message)
-            if message['action']=='STOP' and message['revision']==1:
-                self.poll()  # A parallel status read already observed the stop.
+            if message['action']=='STOP' and message['revision']==1 and not advanced:
+                advanced = True
+                confirmed = self.sync()
+                self.assertEqual(confirmed['tasks'][0]['status'],'STOP_CONFIRMED')
+                self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_CONFIRMED')
                 self.plan(version=2,tasks=[dict(task_id='T1',tag_id='D1',robot_id='S1',revision=2)])
                 self.dispatch();self.stop('T1')
             return response
         with patch.object(self.fleet,'apply',side_effect=advance_revision_while_ack_in_flight):
             result=self.sync(expect=4)
+        self.assertTrue(advanced)
         self.assertEqual(result['tasks'][0]['status'],'ACK_REJECTED')
         row=self.view('T1')['tasks'][0]
         self.assertEqual(row['revision'],2)
@@ -526,6 +532,49 @@ class TaskLedger(unittest.TestCase):
                 self.view(expect=3)
                 self.assertEqual(path.read_text(),body)
         path.write_text(original)
+
+    def test_rejected_stop_ack_recovers_after_poll(self):
+        self.plan()
+        self.dispatch()
+        self.stop('T1')
+        original = self.fleet.apply
+        def wrong_ack(message):
+            response = original(message)
+            return dict(response, command_id='wrong-stop')
+        with patch.object(self.fleet, 'apply', side_effect=wrong_ack):
+            self.sync(expect=4)
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],'STOP_REQUESTED')
+        self.poll()
+        row = self.view('T1')['tasks'][0]
+        self.assertEqual(row['state'],'STOP_REQUESTED')
+        stored = json.loads((self.ledger/'tasks.json').read_text())
+        self.assertEqual(stored['tasks'][0]['sequence'],0)
+        self.assertEqual(self.sync()['tasks'][0]['status'],'STOP_CONFIRMED')
+
+    def test_poll_cannot_bypass_stop_command_confirmation(self):
+        self.plan()
+        self.dispatch()
+        self.stop('T1')
+        command = dict(
+            schema=SCHEMA, mode='simulation', command_id='foreign-stop',
+            robot_id='S1', task_id='T1', revision=1, action='STOP')
+        self.fleet.apply(command)
+        self.poll()
+        self.assertEqual(self.view('T1')['tasks'][0]['state'],
+                         'STOP_REQUESTED')
+        self.assertEqual(self.sync()['tasks'][0]['status'],
+                         'STOP_CONFIRMED')
+
+    def test_plan_rejects_trailing_bytes_and_embedded_nul_identifiers(self):
+        body=dict(schema='spine-plan-v1',plan_id='p1',version=1,
+                  tasks=[dict(task_id='T1',tag_id='D1',robot_id='S1',revision=1)])
+        path=self.root/'invalid-plan.json'
+        for raw in (json.dumps(body)+' trailing',
+                    json.dumps(body).replace('"T1"','"T1\\u0000other"')):
+            with self.subTest(raw=raw):
+                path.write_text(raw)
+                self.run_cli('--task-plan',str(path),str(self.ledger),expect=2)
+                self.assertFalse((self.ledger/'tasks.json').exists())
 
 
 if __name__ == '__main__':
