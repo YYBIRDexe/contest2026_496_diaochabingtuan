@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#102D46">
+  <title>任务中心 · VelaGuard</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css?v=20261018-ui1-2">
+  <script defer src="/static/demo-data.js?v=20261018-ui1-2"></script>
+  <script defer src="/static/app.js?v=20261018-ui1-2"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="VelaGuard 主导航">
+      <a class="brand" href="#tasks" data-nav="tasks" aria-label="返回任务中心">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 27.5c4.6 0 4.6-3.2 9.2-3.2s4.6 3.2 9.2 3.2 4.6-3.2 9.2-3.2 4.4 3 8.4 3.2"/>
+            <path d="M6 34c4.6 0 4.6-3.2 9.2-3.2s4.6 3.2 9.2 3.2 4.6-3.2 9.2-3.2 4.4 3 8.4 3.2"/>
+            <path d="M12 21 22 7l10 14"/>
+            <path d="M22 7v13.5"/>
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <strong>VelaGuard</strong>
+          <span>河海大学 · 人机协作巡检</span>
+        </span>
+      </a>
+
+      <nav class="main-nav" aria-label="四个工作页面">
+        <p class="nav-label">巡查工作台</p>
+        <a class="nav-item" href="#tasks" data-nav="tasks">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 4h8l3 4v12H5V8z"/>
+            <path d="M9 4v5h6V4M8 13h8M8 16.5h5"/>
+          </svg>
+          <span class="nav-text">任务中心<small>发起与审批</small></span>
+        </a>
+        <a class="nav-item" href="#inbox" data-nav="inbox">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 13.5 6.4 5h11.2L20 13.5V20H4z"/>
+            <path d="M4 13.5h4.4l1.2 2.4h4.8l1.2-2.4H20"/>
+          </svg>
+          <span class="nav-text">待我处理<small>证据与复查</small></span>
+        </a>
+        <a class="nav-item" href="#field" data-nav="field">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 21s6.5-5.4 6.5-11a6.5 6.5 0 1 0-13 0C5.5 15.6 12 21 12 21z"/>
+            <circle cx="12" cy="10" r="2.2"/>
+            <path d="M3 22c2.4 0 2.4-1.6 4.8-1.6"/>
+          </svg>
+          <span class="nav-text">现场<small>逻辑站点</small></span>
+        </a>
+        <a class="nav-item" href="#review" data-nav="review">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 20V10M12 20V4M19 20v-7"/>
+            <path d="M3 20h18"/>
+          </svg>
+          <span class="nav-text">实训复盘<small>计划与闭环</small></span>
+        </a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="sidebar-status" id="sidebar-status">
+          <span class="status-dot status-dot-unknown" id="sidebar-dot" aria-hidden="true"></span>
+          <span class="sidebar-status-copy">
+            <strong id="sidebar-status-title">正在检查服务</strong>
+            <small id="sidebar-status-detail">助手与登记状态</small>
+          </span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="breadcrumb" aria-label="面包屑">
+          <span>VelaGuard</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m9 6 6 6-6 6"/>
+          </svg>
+          <strong id="crumb-current">任务中心</strong>
+        </div>
+        <div class="topbar-actions">
+          <div class="mode-switch" role="group" aria-label="数据模式">
+            <button type="button" class="mode-btn is-active" data-set-mode="real" aria-pressed="true">
+              <span class="mode-dot" aria-hidden="true"></span>真实连接
+            </button>
+            <button type="button" class="mode-btn" data-set-mode="demo" aria-pressed="false">
+              <span class="mode-dot" aria-hidden="true"></span>示例体验
+            </button>
+          </div>
+          <button type="button" class="top-action" id="refresh-button" aria-label="刷新状态">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 11a8 8 0 1 0-2.4 5.7"/>
+              <path d="M20 5v6h-6"/>
+            </svg>
+            <span>刷新</span>
+          </button>
+          <button type="button" class="top-action" id="settings-button" aria-label="打开连接设置">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/>
+            </svg>
+            <span>连接设置</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="demo-bar" id="demo-bar" role="status" hidden>
+        <span class="demo-mark">示例</span>
+        <p><strong>示例数据 · 不控制真实设备</strong><span>大坝、河道与工单均来自本地示例数据，不调用生产写接口。</span></p>
+        <button type="button" class="demo-exit" id="demo-exit">退出示例</button>
+      </div>
+
+      <div class="offline-bar" id="offline-bar" role="status" hidden>
+        <strong>浏览器处于离线状态</strong>
+        <span>页面仍可查看已经加载的内容；刷新与巡查助手会失败，恢复网络后再试。</span>
+      </div>
+
+      <main id="main" class="main">
+        <!-- ---------------------------------------------------------- 任务中心 -->
+        <section class="page-view page-tasks" id="page-tasks" data-page-panel="tasks" aria-labelledby="tasks-title">
+          <header class="page-head">
+            <div class="page-head-copy">
+              <p class="eyebrow">任务中心 · 河海水利场景</p>
+              <h1 id="tasks-title" tabindex="-1">今天，先巡查哪里？</h1>
+              <p class="lede">从坝顶、河道或实训室开始。写一句目标，助手帮你核对登记条件。</p>
+            </div>
+            <div class="page-head-visual">
+              <figure class="scene-figure">
+                <img src="/static/assets/water-scene.png" width="450" height="120" alt="水库、大坝与河流场景插画，仅作装饰示意，不是现场照片或证据">
+                <figcaption>水利场景示意 · 非现场</figcaption>
+              </figure>
+            </div>
+          </header>
+
+          <div class="task-grid">
+            <div class="task-main">
+              <section class="block templates-block" aria-labelledby="templates-title">
+                <div class="block-head">
+                  <div>
+                    <h2 id="templates-title">场景模板</h2>
+                    <p>点一下填入草案，不会自动发送。</p>
+                  </div>
+                  <span class="block-note" id="template-feedback" aria-live="polite">未发送</span>
+                </div>
+                <div class="template-grid">
+                  <button type="button" class="template-card" data-template="lab" aria-label="填入实训室巡查草案">
+                    <span class="template-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 21V8l7-5 7 5v13"/>
+                        <path d="M9 21v-6h6v6M8 11h2M14 11h2"/>
+                      </svg>
+                    </span>
+                    <strong>实训室</strong>
+                    <span>课前/课后复查；设备状态人工复核。</span>
+                  </button>
+                  <button type="button" class="template-card" data-template="dam" aria-label="填入大坝巡查草案">
+                    <span class="template-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9c3.5-2.6 7-3.2 10.5-1.5S20 9.5 21 8"/>
+                        <path d="M4 15c3.4 0 3.4-2 6.8-2s3.4 2 6.8 2 3.2-2 3.4-2"/>
+                        <path d="M8 20 10 5h4l2 15M7 20h10"/>
+                      </svg>
+                    </span>
+                    <strong>大坝</strong>
+                    <span>坝顶、坝前水域与下游观察点。</span>
+                  </button>
+                  <button type="button" class="template-card" data-template="river" aria-label="填入河道巡查草案">
+                    <span class="template-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 7c3-2 5-2 8 0s5 2 8 0M4 12c3-2 5-2 8 0s5 2 8 0M4 17c3-2 5-2 8 0s5 2 8 0"/>
+                      </svg>
+                    </span>
+                    <strong>河道</strong>
+                    <span>岸坡、步道与临水边界。</span>
+                  </button>
+                  <button type="button" class="template-card" data-template="recheck" aria-label="填入指定点复查草案">
+                    <span class="template-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 21s6-5.1 6-10.2A6 6 0 0 0 6 10.8C6 15.9 12 21 12 21z"/>
+                        <path d="m9.5 10.5 2 2 3.5-3.8"/>
+                      </svg>
+                    </span>
+                    <strong>指定点复查</strong>
+                    <span>回到未闭环点位，同角度补证。</span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="block chat-block" aria-labelledby="chat-heading">
+                <div class="block-head">
+                  <div>
+                    <h2 id="chat-heading">巡查助手</h2>
+                    <p id="chat-subtitle">描述目标，助手先核对条件</p>
+                  </div>
+                  <div class="chat-head-tags">
+                    <span class="tag tag-neutral" id="chat-state">待首次回复</span>
+                  </div>
+                </div>
+                <div class="chat-surface">
+                  <div class="transcript" id="chat-transcript" role="log" aria-live="polite" aria-label="对话记录"></div>
+                  <div class="suggestion-row" id="chat-suggestions" aria-label="快捷问题，只填入不发送">
+                    <button type="button" class="suggestion" data-suggestion="请告诉我你目前能做什么">现在能做什么</button>
+                    <button type="button" class="suggestion" data-suggestion="现在有哪些已核验的标定路线？">已登记路线</button>
+                    <button type="button" class="suggestion" data-suggestion="车队现在在线吗？">车队是否在线</button>
+                    <button type="button" class="suggestion" data-suggestion="我需要怎样登记路线和车辆？">怎么登记</button>
+                  </div>
+                  <form class="composer" id="chat-form" novalidate>
+                    <label class="sr-only" for="chat-input">输入巡查目标</label>
+                    <textarea id="chat-input" name="message" rows="3" maxlength="2000" placeholder="例如：明早九点前，巡查大坝坝顶和下游观察点，重点看积水和警示牌。"></textarea>
+                    <div class="composer-foot">
+                      <p class="composer-hint" id="composer-hint">仅生成待确认计划；车辆执行尚未连接。Ctrl + Enter 发送。</p>
+                      <div class="composer-actions">
+                        <span class="char-count" id="char-count">0 / 2000</span>
+                        <button type="submit" class="btn btn-primary" id="send-button">发送</button>
+                      </div>
+                    </div>
+                  </form>
+                  <p class="inline-note" id="chat-blocked" hidden></p>
+                  <p class="inline-error" id="chat-error" role="alert" hidden></p>
+                </div>
+              </section>
+            </div>
+
+            <aside class="task-side" aria-label="现场准备与计划">
+              <section class="block prep-block" aria-labelledby="prep-title">
+                <div class="block-head">
+                  <div>
+                    <h2 id="prep-title">现场准备</h2>
+                    <p>维护者登记信息</p>
+                  </div>
+                  <span class="tag tag-neutral" id="prep-tag">读取中</span>
+                </div>
+                <div class="prep-list" id="prep-list" aria-live="polite"></div>
+                <p class="block-foot" id="prep-foot">正在读取服务、路线与车辆登记。</p>
+              </section>
+
+              <section class="block plans-block" aria-labelledby="plans-title">
+                <div class="block-head">
+                  <div>
+                    <h2 id="plans-title">待确认计划</h2>
+                    <p id="plans-subtitle">来自服务端提案</p>
+                  </div>
+                  <span class="count-badge" id="plans-count">—</span>
+                </div>
+                <div class="plan-list" id="plans-list" aria-live="polite"></div>
+                <p class="block-foot" id="plans-foot">确认后记录审批结果。</p>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------------- 待我处理 -->
+        <section class="page-view" id="page-inbox" data-page-panel="inbox" aria-labelledby="inbox-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <p class="eyebrow">人工闭环 · 证据与复查</p>
+              <h1 id="inbox-title" tabindex="-1">待我处理</h1>
+              <p class="lede">证据先于处理，复查先于销项。提交处理不等于合格。</p>
+            </div>
+          </header>
+
+          <div class="inbox-real inbox-real-compact" id="inbox-real">
+            <section class="block empty-workorders compact-empty">
+              <div class="empty-copy">
+                <span class="tag tag-neutral">真实连接</span>
+                <h2>现场工单尚未接入</h2>
+                <p>真实模式只显示平台返回的工单；当前没有工单来源，也不会用示例工单补位。</p>
+                <div class="action-row">
+                  <button type="button" class="btn btn-primary" data-enter-demo>进入示例体验</button>
+                </div>
+                <details class="tech-details compact-details">
+                  <summary>技术接入要求</summary>
+                  <ul class="compact-list">
+                    <li>工单来源与授权范围由平台接口提供；页面不伪造角色或权限。</li>
+                    <li>每条记录需带时间、来源和数据年龄；照片必须可追溯。</li>
+                    <li>提交处理进入待复查，复查合格才销项；车辆执行通道仍未接入。</li>
+                  </ul>
+                </details>
+              </div>
+            </section>
+          </div>
+
+          <div class="inbox-layout" id="inbox-demo" hidden>
+            <section class="block wo-list-block" aria-labelledby="demo-wo-list-title">
+              <div class="block-head">
+                <div>
+                  <h2 id="demo-wo-list-title">示例工单</h2>
+                  <p>本地示例数据 · 状态与记录仅在本页</p>
+                </div>
+                <span class="count-badge" id="demo-wo-count">3</span>
+              </div>
+              <div class="wo-list" id="demo-wo-list"></div>
+              <div class="block-foot demo-list-foot">
+                <span>示例数据不会写入生产系统。</span>
+                <button type="button" class="text-button" data-demo-action="reset">重置示例数据</button>
+              </div>
+            </section>
+            <section class="block wo-detail-block" id="demo-wo-detail" aria-live="polite"></section>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------------- 现场 -->
+        <section class="page-view" id="page-field" data-page-panel="field" aria-labelledby="field-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <p class="eyebrow">现场 · 逻辑站点</p>
+              <h1 id="field-title" tabindex="-1">查看巡查站点与关联工单</h1>
+              <p class="lede">真实模式只读取已登记路线、车辆与能力。节点表示业务顺序，不是地图坐标。</p>
+            </div>
+          </header>
+          <div id="field-real"></div>
+          <div id="field-demo" hidden>
+            <section class="block topology-block" aria-labelledby="topology-title">
+              <div class="block-head">
+                <div>
+                  <h2 id="topology-title">大坝逻辑拓扑</h2>
+                  <p>坝前水域 → 坝顶入口 → 坝顶巡查段 → 下游观察点</p>
+                </div>
+                <span class="tag tag-demo">逻辑拓扑 · 非实时地图</span>
+              </div>
+              <div class="topology-scene">
+                <div class="topology-track" id="demo-topology"></div>
+                <div class="water-strip" aria-hidden="true">
+                  <svg viewBox="0 0 1200 120" preserveAspectRatio="none" fill="none">
+                    <path d="M0 52c120-28 210 18 330-4s190-46 330-20 240 44 350 18 130-14 190-10v84H0z" fill="#DFF4F7"/>
+                    <path d="M0 68c120-28 210 18 330-4s190-46 330-20 240 44 350 18 130-14 190-10" stroke="#087F9C" stroke-width="1.6" opacity=".5"/>
+                    <path d="M0 92c120-22 210 14 330-4s190-36 330-16 240 36 350 14 130-10 190-8" stroke="#087F9C" stroke-width="1.2" opacity=".24"/>
+                  </svg>
+                </div>
+              </div>
+              <p class="block-foot">节点按业务顺序排列；位置仅示意。</p>
+            </section>
+            <div class="field-lower">
+              <section class="block node-detail-block" id="demo-node-detail" aria-live="polite"></section>
+              <aside class="block boundary-block" aria-label="示例能力边界">
+                <details class="boundary-details">
+                  <summary>能力边界：不控制设备、不判定安全</summary>
+                  <ul class="boundary-list">
+                    <li><strong>不控制设备</strong><span>没有速度、坐标或底盘接口，也不下发任务。</span></li>
+                    <li><strong>不是实时地图</strong><span>节点只有业务顺序，没有定位和地理坐标。</span></li>
+                    <li><strong>不下安全结论</strong><span>示例记录不代表坝体、岸坡或水质安全。</span></li>
+                    <li><strong>不传生产数据</strong><span>工单与复盘只保存在本页内存。</span></li>
+                  </ul>
+                </details>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------------- 实训复盘 -->
+        <section class="page-view" id="page-review" data-page-panel="review" aria-labelledby="review-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <p class="eyebrow">实训复盘 · 记录而非绩效</p>
+              <h1 id="review-title" tabindex="-1">巡查过程与处理复盘</h1>
+              <p class="lede">真实模式统计计划提案与确认状态；示例模式展示本地工单流程，所有数字都标明模拟。</p>
+            </div>
+          </header>
+          <div id="review-content"></div>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <p>数据来源：维护者登记表与巡查助手；示例模式为本地示例数据。路线与车辆以现场标定和登记为准。</p>
+        <p class="footer-sign">VelaGuard · 河海大学 · 人机协作巡检</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ---------------------------------------------------------- 连接设置 -->
+  <div class="modal" id="settings-modal" hidden>
+    <div class="modal-backdrop" data-close-settings></div>
+    <section class="modal-card" id="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+      <header class="modal-head">
+        <div>
+          <p class="eyebrow">维护者</p>
+          <h2 id="settings-title">连接设置</h2>
+        </div>
+        <button type="button" class="icon-close" data-close-settings aria-label="关闭连接设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="settings-grid">
+          <section class="settings-section" aria-labelledby="token-title">
+            <h3 id="token-title">访问口令</h3>
+            <p class="field-help">只在维护者启用了访问口令时需要。口令仅保存在当前标签页，不写入日志，也不会显示在地址栏。</p>
+            <label class="field-label" for="token-input">访问口令</label>
+            <input id="token-input" type="password" autocomplete="off" placeholder="由维护者提供">
+            <div class="action-row">
+              <button type="button" class="btn btn-primary" id="token-save">保存口令</button>
+              <button type="button" class="btn btn-quiet" id="token-clear">清除口令</button>
+            </div>
+            <p class="field-help" id="token-state">尚未设置访问口令。</p>
+          </section>
+          <section class="settings-section" aria-labelledby="service-title">
+            <h3 id="service-title">服务状态</h3>
+            <dl class="detail-list" id="settings-health"></dl>
+            <p class="field-help">“已配置”只表示可以发起助手对话，不代表本会话已经收到过成功回复。</p>
+            <p class="field-help" id="settings-checked">尚未检查。</p>
+          </section>
+        </div>
+        <details class="tech-details">
+          <summary>技术信息（维护者）</summary>
+          <dl class="detail-list" id="settings-tech"></dl>
+          <p class="field-help">这里只显示非秘密配置。访问口令、API Key 与环境变量内容不会写入页面或日志。</p>
+        </details>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-quiet" data-close-settings>关闭</button>
+      </footer>
+    </section>
+  </div>
+
+  <!-- ---------------------------------------------------------- 确认弹窗 -->
+  <div class="modal" id="confirm-modal" hidden>
+    <div class="modal-backdrop" data-confirm-cancel></div>
+    <section class="modal-card modal-card-small" id="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message" tabindex="-1">
+      <header class="modal-head">
+        <div>
+          <p class="eyebrow">需要确认</p>
+          <h2 id="confirm-title">确认操作</h2>
+        </div>
+        <button type="button" class="icon-close" data-confirm-cancel aria-label="关闭确认弹窗">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <p class="confirm-message" id="confirm-message"></p>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-quiet" data-confirm-cancel>取消</button>
+        <button type="button" class="btn btn-primary" id="confirm-action">确认</button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

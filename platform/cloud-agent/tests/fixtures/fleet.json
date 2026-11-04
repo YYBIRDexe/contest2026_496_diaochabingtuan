@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "测试用虚构车辆（fixture，不是真实登记）",
+  "source": "test_fixture",
+  "note": "仅用于 tests/ 的接口与校验测试。车辆名称、状态和能力均为虚构创作数据，不得复制到生产 data/，也不得当作在线状态、维修结论或能力证据。",
+  "robots": [
+    {
+      "id": "mentorpi-01",
+      "name": "测试车 01",
+      "model": "fixture-model",
+      "enabled": true,
+      "status": "fixture_registered",
+      "telemetry": "not_connected",
+      "last_seen": null,
+      "capabilities": ["inspection", "navigation", "camera"]
+    },
+    {
+      "id": "mentorpi-02",
+      "name": "测试车 02",
+      "model": "fixture-model",
+      "enabled": true,
+      "status": "fixture_registered",
+      "telemetry": "not_connected",
+      "last_seen": null,
+      "capabilities": ["inspection", "navigation", "camera"]
+    },
+    {
+      "id": "mentorpi-03",
+      "name": "测试车 03",
+      "model": "fixture-model",
+      "enabled": true,
+      "status": "fixture_registered",
+      "telemetry": "not_connected",
+      "last_seen": null,
+      "capabilities": ["inspection", "camera"]
+    },
+    {
+      "id": "mentorpi-04",
+      "name": "测试车 04（停用）",
+      "model": "fixture-model",
+      "enabled": false,
+      "status": "fixture_disabled",
+      "telemetry": "not_connected",
+      "last_seen": null,
+      "capabilities": ["inspection", "navigation", "camera"]
+    }
+  ]
+}

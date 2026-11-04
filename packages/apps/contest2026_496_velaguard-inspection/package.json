@@ -1,0 +1,18 @@
+{
+  "name": "velaguard-openvela-inspection",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VelaGuard 巡检快应用（openvela / goldfish-arm64-v8a-ap）—— 手机式触控界面 + 分区巡检四功能 + 端侧 AI 对话",
+  "scripts": {
+    "test": "node tools/run-tests.js",
+    "test:logic": "node tools/test-store.js",
+    "test:tpl": "node tools/test-tpl.js",
+    "test:ui": "node tools/test-ui.js",
+    "check:routes": "node tools/gen-waypoints.js --check",
+    "build": "node tools/build-openvela.js",
+    "check:app": "node tools/check-openvela-app.js",
+    "preview": "node tools/preview-server.js",
+    "shots": "node tools/shot.js",
+    "map": "node tools/ros-map-to-vector.js --auto"
+  }
+}

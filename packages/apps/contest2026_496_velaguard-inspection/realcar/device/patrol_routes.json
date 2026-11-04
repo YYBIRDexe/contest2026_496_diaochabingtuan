@@ -1,0 +1,108 @@
+{
+  "_readme": [
+    "VelaGuard 预编巡检路线（车端执行版）——「点一下开始巡检，四台车真的动」的路线表。",
+    "",
+    "设计原则（改之前先读完）：",
+    "1) 每台车的路线 = 一串【车体坐标系】的相对动作原语，不是地图绝对坐标。",
+    "   原因：车端 /odom 是上电清零的相对里程计，没有全局定位；",
+    "   要求「车必须停在某个绝对坐标」会让演示无法复现。",
+    "2) 只用三个原语：forward / back / strafe_left / strafe_right（麦轮横移）。",
+    "   横移代替转向 —— 转向会累积航向漂移，横移在车体坐标系里是精确的。",
+    "3) 约定：每台车出发时【车头朝向本区域的巡检方向】。四个区域同向摆放，",
+    "   zone_heading_deg 只是给摆放的人看的，控制器不读它。",
+    "4) 单步 ≤ 0.90 m，单条 ≤ 3.0 m（与 openvela 侧 data.js 的约束一致）。",
+    "5) dwell = 到点原地停留秒数（不发速度），对应「读数/看点」。",
+    "",
+    "每条路线的几何与 openvela 快应用 data.js 的四条固定路线一致：",
+    "  Z1 入口大厅 EN01->EN02->EN03->EN04 / Z2 主通道 AI01..AI04",
+    "  Z3 展项区 EX01..EX04      / Z4 设备区 EQ01..EQ04",
+    "",
+    "=== route_mode：两种模式，差别只在「谁决定每一步的方向」 ===",
+    "fixed    —— 严格按下面 zones[].steps 执行。前提是车按 placement 摆好，",
+    "            且每个方向都有 ≥ 距离+0.20 m 的空间。摆歪了就四台车全受阻。",
+    "adaptive —— 保留同一套原语与矩形巡检形状（前进→左移→右移→回起点），",
+    "            但每步方向挑**当前空间最大的那条**，距离取",
+    "            min(表里的距离, 该方向可用空间 − 0.20 m)。车摆在哪儿都能跑，",
+    "            而且跑完回到出发点。实测依据：四台车清障后的可用空间",
+    "            前进 0.41~0.93 m、其余方向 0.21~6.91 m，fixed 模式必然被雷达拒动。",
+    "默认 adaptive。要严格复现地图上那四条固定路线，改回 fixed 并先按 placement 摆车。"
+  ],
+
+  "schema": 1,
+  "units": { "distance_m": "米", "duration_s": "秒", "heading_deg": "度（0=+x 方向）" },
+
+  "safety": {
+    "speed_mps": 0.15,
+    "max_step_m": 0.90,
+    "max_route_m": 3.00,
+    "battery_min": 15,
+    "step_timeout_s": 40,
+    "stop_on_blocked": false,
+    "hover_after_round_s": 0,
+    "route_mode": "adaptive",
+    "robot_half_width_m": 0.18,
+    "motion_clearance_m": 0.20,
+    "adaptive_min_step_m": 0.15,
+    "adaptive_min_move_m": 0.25,
+    "clearance_tol_m": 0.03,
+    "turn_clearance_m": 0.30
+  },
+
+  "zone_heading_deg": {
+    "Z1": 0,
+    "Z2": 0,
+    "Z3": 0,
+    "Z4": 0
+  },
+
+  "zones": {
+    "Z1": {
+      "name": "入口大厅",
+      "car": 1,
+      "ip": "192.168.1.201",
+      "route_name": "入口 → 前台 → 闸机",
+      "placement": "车头朝主通道方向放在入口起点，右侧留 1 m 空",
+      "steps": [
+        { "id": "EN01", "label": "入口起点", "op": "forward", "m": 0.90, "dwell": 0.5 },
+        { "id": "EN02", "label": "前台", "op": "strafe_left", "m": 0.90, "dwell": 0.0 },
+        { "id": "EN03", "label": "闸机", "op": "forward", "m": 0.50, "dwell": 1.0 }
+      ]
+    },
+    "Z2": {
+      "name": "主通道",
+      "car": 2,
+      "ip": "192.168.1.202",
+      "route_name": "通道 A 段 → B 段（全程直行）",
+      "placement": "车头朝通道纵深方向，前后各留 1.2 m",
+      "steps": [
+        { "id": "AI01", "label": "通道起点", "op": "forward", "m": 0.90, "dwell": 0.5 },
+        { "id": "AI02", "label": "通道 A 段", "op": "forward", "m": 0.90, "dwell": 0.0 },
+        { "id": "AI03", "label": "通道 B 段", "op": "forward", "m": 0.80, "dwell": 1.0 }
+      ]
+    },
+    "Z3": {
+      "name": "展项区",
+      "car": 3,
+      "ip": "192.168.1.203",
+      "route_name": "展台 1 → 展台 4 绕行",
+      "placement": "车头朝展台纵深方向，左侧留 1 m 空",
+      "steps": [
+        { "id": "EX01", "label": "展项起点", "op": "strafe_left", "m": 0.90, "dwell": 0.5 },
+        { "id": "EX02", "label": "展台 1", "op": "forward", "m": 0.90, "dwell": 0.0 },
+        { "id": "EX03", "label": "展台 3", "op": "forward", "m": 0.90, "dwell": 1.0 }
+      ]
+    },
+    "Z4": {
+      "name": "设备区",
+      "car": 4,
+      "ip": "192.168.1.204",
+      "route_name": "配电柜 → 机柜背面",
+      "placement": "车头朝机柜纵深方向，右侧留 1 m 空",
+      "steps": [
+        { "id": "EQ01", "label": "配电柜", "op": "strafe_right", "m": 0.90, "dwell": 0.5 },
+        { "id": "EQ02", "label": "设备区中段", "op": "forward", "m": 0.90, "dwell": 0.0 },
+        { "id": "EQ03", "label": "机柜前", "op": "forward", "m": 0.90, "dwell": 1.0 }
+      ]
+    }
+  }
+}

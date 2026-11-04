@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="img" aria-labelledby="artTitle artDesc">
+  <title id="artTitle">水利科研园区构图首稿</title>
+  <desc id="artDesc">斜俯视的白色大坝横跨画面，深靛蓝水库在左上，溢洪道水流汇入下游，右侧白色科研楼被画面裁切。虚构场景，不是现场照片或地图。</desc>
+
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EAF9FF"/>
+      <stop offset="0.52" stop-color="#F8FDFF"/>
+      <stop offset="1" stop-color="#D8EFFB"/>
+    </linearGradient>
+    <linearGradient id="deep" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#03143F"/>
+      <stop offset="0.42" stop-color="#0B3AA8"/>
+      <stop offset="0.78" stop-color="#1254D9"/>
+      <stop offset="1" stop-color="#098EEA"/>
+    </linearGradient>
+    <linearGradient id="inlet" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#0B3AA8"/>
+      <stop offset="0.62" stop-color="#1254D9"/>
+      <stop offset="1" stop-color="#36DCEB"/>
+    </linearGradient>
+    <linearGradient id="damFace" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#EDF8FE"/>
+      <stop offset="1" stop-color="#C7E1F1"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#0B3AA8"/>
+      <stop offset="0.5" stop-color="#0A2C7C"/>
+      <stop offset="1" stop-color="#03143F"/>
+    </linearGradient>
+    <linearGradient id="gateWater" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DFFEFF"/>
+      <stop offset="0.55" stop-color="#36DCEB"/>
+      <stop offset="1" stop-color="#098EEA"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#092D91"/>
+      <stop offset="0.7" stop-color="#1254D9"/>
+      <stop offset="1" stop-color="#098EEA"/>
+    </linearGradient>
+  </defs>
+
+  <!-- sky and the single circular motif -->
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="2">
+    <circle cx="1268" cy="220" r="286" opacity="0.42"/>
+    <circle cx="1268" cy="220" r="218" opacity="0.26"/>
+  </g>
+
+  <!-- far banks: two flat pale masses, no fine detail -->
+  <path d="M0 286c170-46 340-40 512 16 52 18 96 40 136 68H0z" fill="#CFE8F7" opacity="0.86"/>
+  <path d="M1060 300c170-48 356-44 540 8v96h-600z" fill="#C6E3F4" opacity="0.78"/>
+
+  <!-- reservoir: one deep blue mass with a few large cyan sheets -->
+  <path d="M0 300c182-22 362 0 522 60 78 30 128 70 170 126l-74 176C414 620 204 580 0 556z" fill="url(#deep)"/>
+  <path d="M40 366c122-16 244 8 344 54l-30 42c-100-40-202-58-314-50z" fill="#36DCEB" opacity="0.34"/>
+  <path d="M116 486c112-14 216 6 306 50l-28 46c-92-38-188-54-278-48z" fill="#8FF3FF" opacity="0.2"/>
+  <path d="M0 428c120 10 238 38 344 84" fill="none" stroke="#BDF6FF" stroke-width="3" opacity="0.36"/>
+  <path d="M0 512c108 8 212 32 306 72" fill="none" stroke="#DFFEFF" stroke-width="2" opacity="0.28"/>
+
+  <!-- upstream inlet from the left: narrower than the old foreground water -->
+  <path d="M0 336c124 6 236 34 334 82l-34 58C200 436 102 412 0 404z" fill="url(#inlet)" opacity="0.96"/>
+  <path d="M8 354c110 10 214 36 304 80" fill="none" stroke="#DFFEFF" stroke-width="6" opacity="0.3"/>
+
+  <!-- research building: big cropped volumes, three cobalt bands, one dark anchor -->
+  <g>
+    <path d="M1132 254l48-22 420-24v206l-468 26z" fill="#06245F" opacity="0.2"/>
+    <path d="M1140 258l40-24 420-18v198l-460 28z" fill="#D8ECF9"/>
+    <path d="M1180 234l460-28v124l-460 26z" fill="#FFFFFF"/>
+    <path d="M1180 234l60-30 400-22v28l-460 24z" fill="#F4FBFF"/>
+    <path d="M1230 120l370-24v100l-370 24z" fill="#FFFFFF"/>
+    <path d="M1196 138l34-18 370-24v26l-404 34z" fill="#F4FBFF"/>
+    <path d="M1260 150l340-22v32l-340 24z" fill="url(#glass)" opacity="0.94"/>
+    <path d="M1200 270l400-26v34l-400 28z" fill="url(#glass)" opacity="0.92"/>
+    <path d="M1200 320l400-26v32l-400 28z" fill="#0B3AA8" opacity="0.82"/>
+    <path d="M1200 366l400-26v24l-400 26z" fill="#092D91" opacity="0.65"/>
+    <path d="M1320 300l44-4v66l-44 4z" fill="#04173D"/>
+    <path d="M1540 88v-30" stroke="#04173D" stroke-width="5"/>
+    <circle cx="1540" cy="52" r="5" fill="#36DCEB"/>
+  </g>
+
+  <!-- dam: the largest white shape, crest on a rising diagonal -->
+  <g>
+    <path d="M400 480c300-36 640-70 1040-104l16 38c-400 36-736 72-1036 108z" fill="#FFFFFF"/>
+    <path d="M420 522l1036-108-56 286c-320 36-660 42-930-6z" fill="url(#damFace)"/>
+    <path d="M420 522l1036-108-4 26L432 548z" fill="#06245F" opacity="0.16"/>
+    <path d="M420 522l80-8 40 180c-24 6-48 6-70 4z" fill="#BFDBEC" opacity="0.9"/>
+    <path d="M1280 440l176-18-56 278-144 4z" fill="#A9CCE2" opacity="0.36"/>
+    <path d="M820 490l260-24 130 234-270 4z" fill="#B9D9EC" opacity="0.22"/>
+
+    <!-- three spillway gates: dark anchors, cyan water sheets -->
+    <g>
+      <path d="M600 516l100-10 16 170-102 6z" fill="#04173D"/>
+      <path d="M614 592l96-8 6 92-102 6z" fill="url(#gateWater)" opacity="0.92"/>
+      <path d="M600 506l100-10 1 16-100 10z" fill="#020E29"/>
+
+      <path d="M760 500l100-10 16 168-102 6z" fill="#04173D"/>
+      <path d="M774 584l96-8 6 82-102 6z" fill="url(#gateWater)" opacity="0.9"/>
+      <path d="M760 490l100-10 1 16-100 10z" fill="#020E29"/>
+
+      <path d="M920 484l100-10 16 166-102 6z" fill="#04173D"/>
+      <path d="M934 580l96-8 6 72-102 6z" fill="url(#gateWater)" opacity="0.88"/>
+      <path d="M920 474l100-10 1 16-100 10z" fill="#020E29"/>
+    </g>
+
+    <!-- one large penstock ring on the dam face -->
+    <g fill="none">
+      <circle cx="1200" cy="566" r="86" stroke="#FFFFFF" stroke-width="12" opacity="0.78"/>
+      <circle cx="1200" cy="566" r="60" stroke="#36DCEB" stroke-width="5" opacity="0.82"/>
+      <circle cx="1200" cy="566" r="88" stroke="#0B3AA8" stroke-width="2" opacity="0.3"/>
+    </g>
+
+    <!-- gallery shadow and crest posts: only a few small dark anchors -->
+    <path d="M520 676c280 22 580 18 850-6l-8 22c-274 24-566 28-834 6z" fill="#06245F" opacity="0.5"/>
+    <path d="M700 500v-24M1080 468v-22" stroke="#04173D" stroke-width="5"/>
+  </g>
+
+  <!-- foreground water: broad, but kept below the entry objects -->
+  <path d="M0 730c260-24 520-2 760 40 260 44 540 30 840-28v158H0z" fill="url(#front)"/>
+  <path d="M60 798c160-18 300 0 440 36l-50 38c-130-26-250-32-360-20z" fill="#36DCEB" opacity="0.5"/>
+  <path d="M600 820c160-14 300 4 420 38l-30 32c-140-26-250-30-340-16z" fill="#8FF3FF" opacity="0.3"/>
+  <path d="M1100 778c140-12 300 6 420 34l-40 30c-120-24-230-28-330-16z" fill="#36DCEB" opacity="0.38"/>
+  <path d="M500 694c260 36 580 32 890-4" fill="none" stroke="#FFFFFF" stroke-width="9" opacity="0.72"/>
+  <path d="M540 716c240 28 500 24 780-10" fill="none" stroke="#DFFEFF" stroke-width="4" opacity="0.56"/>
+  <path d="M180 870c200-24 420-22 640 2" fill="none" stroke="#BDF6FF" stroke-width="3" opacity="0.28"/>
+
+  <!-- spillway sheet rides on the foreground water, not under it -->
+  <path d="M600 682c110 12 230 14 340 6l100-8 80 86c-150 34-320 40-480 18l-80-86z" fill="#8FF3FF" opacity="0.84"/>
+  <path d="M620 706c130 32 286 34 448 4" fill="none" stroke="#FFFFFF" stroke-width="10" opacity="0.78"/>
+  <path d="M660 748c128 24 266 22 404-6" fill="none" stroke="#DFFEFF" stroke-width="5" opacity="0.62"/>
+
+  <!-- near white bank at the lower left: one large, hard-edged counterweight -->
+  <path d="M0 604c92-4 174 18 242 66-26 60-86 112-166 150H0z" fill="#F4FBFF"/>
+  <path d="M0 704c70 8 130 34 180 74-52 18-112 30-180 42z" fill="#B9D9EC" opacity="0.55"/>
+  <path d="M20 626c76 8 142 34 196 76" fill="none" stroke="#0E4B63" stroke-width="4" opacity="0.4"/>
+</svg>
