@@ -1,0 +1,11 @@
+# Runtime state and local secrets must never be committed.
+var/
+state/
+.deploy/
+__pycache__/
+*.py[cod]
+.env
+config/*.env
+config/*.key
+*.key
+.pytest_cache/

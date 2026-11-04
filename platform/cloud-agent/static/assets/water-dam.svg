@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" fill="none" role="img" aria-labelledby="dam-title">
+  <title id="dam-title">水库、大坝与下游河道的剖面示意图</title>
+  <defs>
+    <linearGradient id="waterSurface" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DFF4F7"/>
+      <stop offset="1" stop-color="#F2FAFC"/>
+    </linearGradient>
+    <linearGradient id="damFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EEF6F9"/>
+    </linearGradient>
+  </defs>
+
+  <g stroke="#A9C9D5" stroke-width="1.2" stroke-linecap="round" opacity=".7">
+    <path d="M24 148c44-34 76-52 122-44 30 5 48 22 80 18 38-5 53-35 94-34 30 1 49 16 72 34"/>
+    <path d="M410 120c36-26 66-36 104-28 26 5 42 18 68 16 30-2 52-18 86-10"/>
+    <path d="M22 163c52-30 84-42 128-34 26 5 43 18 70 16 42-3 54-30 98-29 34 1 55 18 80 36"/>
+  </g>
+
+  <path d="M20 236c40-12 68-12 108 0 40 12 74 12 116 0 46-13 82-13 124 0v124H20z" fill="url(#waterSurface)" stroke="#B7DDE5" stroke-width="1.4"/>
+  <path d="M28 252c30-9 54-9 84 0s54 9 84 0 54-9 84 0 54 9 84 0" stroke="#087F9C" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
+  <path d="M28 276c30-9 54-9 84 0s54 9 84 0 54-9 84 0 54 9 84 0" stroke="#087F9C" stroke-width="1.4" stroke-linecap="round" opacity=".4"/>
+  <path d="M28 302c30-9 54-9 84 0s54 9 84 0 54-9 84 0 54 9 84 0" stroke="#087F9C" stroke-width="1.2" stroke-linecap="round" opacity=".22"/>
+
+  <g>
+    <path d="M318 132h92l52 216H284z" fill="url(#damFace)" stroke="#102D46" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M318 132h92" stroke="#102D46" stroke-width="4" stroke-linecap="round"/>
+    <path d="M330 144v188" stroke="#B7DDE5" stroke-width="1.3"/>
+    <path d="M404 144v188" stroke="#B7DDE5" stroke-width="1.3"/>
+    <path d="M326 178h80M320 222h88M314 266h96M307 306h102" stroke="#D3E6ED" stroke-width="1.1"/>
+    <rect x="340" y="186" width="46" height="58" rx="3" fill="#F7FCFD" stroke="#087F9C" stroke-width="1.4"/>
+    <path d="M340 202h46M340 218h46M340 234h46" stroke="#B7DDE5" stroke-width="1"/>
+    <path d="M356 244v32" stroke="#087F9C" stroke-width="1.4"/>
+  </g>
+
+  <path d="M410 300c46-18 86-12 128-26 34-12 62-32 92-30 36 2 58 30 92 34l-2 78H410z" fill="url(#waterSurface)" stroke="#B7DDE5" stroke-width="1.4"/>
+  <path d="M430 318c34-11 54-6 82-15s44-24 70-22 42 20 68 25 46 3 68-4" stroke="#087F9C" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+  <path d="M446 342c30-9 52-4 78-12s40-18 64-16 38 15 60 19 40 2 60-4" stroke="#087F9C" stroke-width="1.2" stroke-linecap="round" opacity=".38"/>
+
+  <g stroke="#102D46" stroke-width="1.5" stroke-linecap="round">
+    <path d="M286 348h18M276 358h28M266 368h38"/>
+  </g>
+  <g fill="#087F9C">
+    <circle cx="194" cy="212" r="2.2" opacity=".55"/>
+    <circle cx="246" cy="224" r="1.8" opacity=".4"/>
+    <circle cx="164" cy="196" r="1.6" opacity=".35"/>
+    <circle cx="508" cy="294" r="1.8" opacity=".4"/>
+  </g>
+  <g stroke="#102D46" stroke-width="1.4" stroke-linecap="round" opacity=".65">
+    <path d="M148 196v-30m0 0-8 10m8-10 8 10"/>
+    <path d="M572 268v-26m0 0-7 9m7-9 7 9"/>
+  </g>
+</svg>

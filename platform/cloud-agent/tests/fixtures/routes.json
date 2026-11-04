@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "测试用虚构路线（fixture，不是现场标定）",
+  "source": "test_fixture",
+  "note": "仅用于 tests/ 的接口与校验测试。这里的地点、检查项和状态均为虚构创作数据，不得复制到生产 data/，也不得当作真实场地或真实能力。",
+  "routes": [
+    {
+      "id": "route-a",
+      "name": "测试路线 A",
+      "zone": "fixture 区域 A",
+      "enabled": true,
+      "checkpoints": ["A-01 fixture 起点", "A-02 fixture 中段", "A-03 fixture 出口"],
+      "checks": [
+        {"id": "aisle_clear", "label": "fixture 检查项：通道无占用"},
+        {"id": "extinguisher_present", "label": "fixture 检查项：灭火器在位"},
+        {"id": "cabinet_closed", "label": "fixture 检查项：设备柜关闭"},
+        {"id": "bench_power_off", "label": "fixture 检查项：台面设备断电"}
+      ]
+    },
+    {
+      "id": "route-b",
+      "name": "测试路线 B",
+      "zone": "fixture 区域 B",
+      "enabled": true,
+      "checkpoints": ["B-01 fixture 起点", "B-02 fixture 终点"],
+      "checks": [
+        {"id": "aisle_clear", "label": "fixture 检查项：通道无占用"},
+        {"id": "fire_door_closed", "label": "fixture 检查项：防火门关闭"},
+        {"id": "floor_no_water", "label": "fixture 检查项：地面无积水"}
+      ]
+    },
+    {
+      "id": "route-c",
+      "name": "测试路线 C",
+      "zone": "fixture 区域 C",
+      "enabled": true,
+      "checkpoints": ["C-01 fixture 起点", "C-02 fixture 终点"],
+      "checks": [
+        {"id": "aisle_clear", "label": "fixture 检查项：通道无占用"},
+        {"id": "shelf_secure", "label": "fixture 检查项：货架稳固"},
+        {"id": "charger_idle", "label": "fixture 检查项：充电位无异常"}
+      ]
+    },
+    {
+      "id": "route-d",
+      "name": "测试路线 D（停用）",
+      "zone": "fixture 区域 D",
+      "enabled": false,
+      "checkpoints": ["D-01 fixture 围挡外"],
+      "checks": [
+        {"id": "barrier_intact", "label": "fixture 检查项：围挡完整"}
+      ]
+    }
+  ]
+}

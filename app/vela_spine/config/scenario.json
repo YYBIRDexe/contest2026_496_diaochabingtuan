@@ -1,0 +1,22 @@
+{
+  "policy_version": "water-demo-score-v1",
+  "threshold": 70,
+  "robots": [
+    {"id":"S1","route":"BANK_LEFT"},
+    {"id":"S2","route":"BANK_RIGHT"},
+    {"id":"S3","route":"ROOM_LOOP"}
+  ],
+  "weights": {"consequence":40,"urgency":30,"exposure":20,"spread":10},
+  "mode": "tag_demo",
+  "note": "Scenario evidence presets, not real disaster measurements. Change context to change assessment; tag identity is not the decision rule.",
+  "tags": {
+    "D_TAG_1": {"name":"坝体开裂","route":"BANK_LEFT","factors":{"consequence":3,"urgency":2,"exposure":1,"spread":2}},
+    "D_TAG_2": {"name":"有人溺水示例","route":"BANK_RIGHT","factors":{"consequence":5,"urgency":5,"exposure":5,"spread":1}},
+    "D_TAG_3": {"name":"护坡裂痕","route":"BANK_LEFT","factors":{"consequence":2,"urgency":1,"exposure":1,"spread":2}},
+    "D_TAG_4": {"name":"路面开裂","route":"BANK_LEFT","factors":{"consequence":2,"urgency":1,"exposure":2,"spread":1}},
+    "D_TAG_5": {"name":"交通事故示例","route":"BANK_RIGHT","factors":{"consequence":4,"urgency":4,"exposure":4,"spread":2}},
+    "M_TAG_1": {"name":"发动机故障","route":"ROOM_LOOP","factors":{"consequence":3,"urgency":2,"exposure":1,"spread":2}},
+    "M_TAG_2": {"name":"高温示例","route":"ROOM_LOOP","factors":{"consequence":3,"urgency":3,"exposure":1,"spread":3}},
+    "M_TAG_3": {"name":"噪音过大","route":"ROOM_LOOP","factors":{"consequence":1,"urgency":1,"exposure":1,"spread":1}}
+  }
+}

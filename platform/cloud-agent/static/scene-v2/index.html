@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#04173d">
+  <meta name="description" content="VelaGuard 智慧巡检入口；场景为虚构水利园区示意，不代表实时地图或现场数据。">
+  <title>VelaGuard · 智慧巡检</title>
+  <style>
+    /* First-paint splash: inline so the E5 never shows a white browser frame
+       while the 160 KB scene art and the deferred app script load. */
+    html, body { margin: 0; background: #04173d; }
+    #boot-splash {
+      position: fixed; inset: 0; z-index: 9999; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; background: #04173d; color: #eaf6ff;
+      font-family: "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+      letter-spacing: .08em; transition: opacity .18s ease;
+    }
+    #boot-splash .brand { font-size: 22px; font-weight: 700; }
+    #boot-splash .sub { font-size: 14px; opacity: .72; }
+  </style>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/scene-v2/scene.css?v=20261103-ufo-large-noframe">
+  <link rel="stylesheet" href="/static/scene-v2/workspace.css?v=20261102-stage3-ufo-v1">
+  <script defer src="/static/scene-v2/scene-config.js?v=20261102-remove-river-2040"></script>
+  <script defer src="/static/scene-v2/voice.js?v=20261018-workspace-v14"></script>
+  <script defer src="/static/scene-v2/water-art.js?v=20261018-workspace-v14"></script>
+  <link rel="stylesheet" href="/static/scene-v2/submenu.css?v=20261103-map1">
+  <script defer src="/static/scene-v2/submenu.js?v=20261103-map1"></script>
+  <script defer src="/static/scene-v2/scene.js?v=20261103-submenu-v1"></script>
+</head>
+<body>
+  <div id="boot-splash" role="status" aria-live="polite">
+    <div class="brand">VelaGuard · 智慧巡检</div>
+    <div class="sub">正在载入场景…</div>
+  </div>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <div class="v2-app" id="v2-app" data-level="scene" data-panel="closed" data-static="off" data-hidden="false" data-asset="delivered">
+    <div class="ambient" aria-hidden="true"></div>
+
+    <header class="scene-head">
+      <a class="brand" href="#/scene" aria-label="回到场景首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 29.5c5 0 5-3.4 10-3.4s5 3.4 10 3.4 5-3.4 10-3.4 4.8 3.2 8 3.4"/>
+            <path d="M5 37c5 0 5-3.2 10-3.2S20 37 25 37s5-3.2 10-3.2S39.8 37 43 37"/>
+            <path d="M12 23 24 7l12 16"/>
+            <path d="M24 7v14"/>
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <strong>VelaGuard</strong>
+        </span>
+      </a>
+
+      <div class="head-tools">
+        <span class="service-pill" id="service-pill" data-state="checking">
+          <span class="service-dot" aria-hidden="true"></span>
+          <span id="service-text">正在检查助手</span>
+        </span>
+        <button class="tool-btn" type="button" id="static-toggle" aria-pressed="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h10"/>
+            <circle cx="18.5" cy="18" r="2.5"/>
+          </svg>
+          <span id="static-label">静态展示</span>
+        </button>
+        <button class="tool-btn" type="button" id="help-toggle" aria-haspopup="dialog" aria-expanded="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M9.6 9.2a2.6 2.6 0 0 1 4.9 1.2c0 1.8-2.5 2-2.5 3.7"/>
+            <path d="M12 17.4h.01"/>
+          </svg>
+          <span>场景说明</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main" class="scene-main">
+      <div class="scene-media" id="scene-media">
+        <img class="scene-img" id="scene-img"
+             src="/static/scene-v2/assets/scene-hero.svg?v=20261018-water-v13"
+             alt="蓝白色水利科研园区主视觉：斜俯视的弧形大坝从左下横跨画面，三孔溢洪道下泄青色水流汇入深蓝下游水面，坝顶有闸墩启闭机房、栏杆与路灯，右上是深蓝棱柱科研塔与连续岸台，左上是留白的水岸。虚构场景，不是现场照片或地图。"
+             decoding="async" fetchpriority="high">
+        <canvas class="scene-water" id="scene-water" aria-hidden="true"></canvas>
+      </div>
+
+      <div class="scene-shade" aria-hidden="true"></div>
+
+      <section class="scene-title" aria-labelledby="scene-title">
+        <h1 id="scene-title">Velaguard,<br>开始智慧巡检</h1>
+      </section>
+
+      <div class="hotspots" aria-label="首页功能入口">
+        <button class="hotspot" type="button" data-feature="5" data-side="right"
+                aria-label="巡迹地图" aria-expanded="false" aria-controls="side-panel">
+          <span class="ring ring-a" aria-hidden="true"></span>
+          <span class="ring ring-b" aria-hidden="true"></span>
+          <span class="ring ring-c" aria-hidden="true"></span>
+          <span class="burst" aria-hidden="true"></span>
+          <span class="core" aria-hidden="true"><span class="core-dot"></span></span>
+          <span class="hotspot-caption" aria-hidden="true">巡迹地图</span>
+        </button>
+
+        <button class="hotspot" type="button" data-feature="3" data-side="left"
+                aria-label="异常事件" aria-expanded="false" aria-controls="side-panel">
+          <span class="ring ring-a" aria-hidden="true"></span>
+          <span class="ring ring-b" aria-hidden="true"></span>
+          <span class="ring ring-c" aria-hidden="true"></span>
+          <span class="burst" aria-hidden="true"></span>
+          <span class="core" aria-hidden="true"><span class="core-dot"></span></span>
+          <span class="hotspot-caption" aria-hidden="true">异常事件</span>
+        </button>
+
+        <div class="fleet-entry" aria-label="智能巡检车与水下机器人编队示意">
+          <img class="fleet-art" src="/static/scene-v2/assets/inspection-team.svg?v=20261102-v1"
+               alt="" aria-hidden="true" decoding="async">
+          <button class="fleet-action" type="button" data-feature="2"
+                  aria-label="执行异常" aria-expanded="false" aria-controls="side-panel">
+            <span>执行异常</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 5 5 19M5 10v9h9"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+
+<!-- 云端自检：UFO 在大坝上方释放三束下行信号；图标与文案作为同一入口。 -->
+<button class="cloud-agent-entry hub-entry" type="button" data-feature="4"
+        aria-label="云端自检，进入知识库与云端 Agent 自诊页面"
+        aria-expanded="false" aria-controls="side-panel">
+  <span class="ufo-signal" aria-hidden="true">
+    <svg viewBox="0 0 104 82" fill="none" stroke="currentColor"
+         stroke-linecap="round" stroke-linejoin="round">
+      <defs>
+        <linearGradient id="ufo-shell" x1="14" y1="18" x2="88" y2="44" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#baf8ff" stop-opacity=".88"/>
+          <stop offset=".48" stop-color="#49c9f5" stop-opacity=".78"/>
+          <stop offset="1" stop-color="#1673ce" stop-opacity=".9"/>
+        </linearGradient>
+        <linearGradient id="ufo-beam" x1="52" y1="42" x2="52" y2="78" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#79eaff" stop-opacity=".46"/>
+          <stop offset="1" stop-color="#42c9ff" stop-opacity=".04"/>
+        </linearGradient>
+      </defs>
+      <path d="M31 40 20 76h18l8-35Z" fill="url(#ufo-beam)" stroke="#8ceeff" stroke-opacity=".56" stroke-width="1.2"/>
+      <path d="M47 41 44 78h17l-4-37Z" fill="url(#ufo-beam)" stroke="#8ceeff" stroke-opacity=".64" stroke-width="1.2"/>
+      <path d="m59 40 8 36h18L73 39Z" fill="url(#ufo-beam)" stroke="#8ceeff" stroke-opacity=".56" stroke-width="1.2"/>
+      <path d="M36 27c1-12 8-19 16-19s15 7 16 19" fill="#8deaff" fill-opacity=".28" stroke="#c5faff" stroke-width="1.8"/>
+      <path d="M12 34c8-10 72-10 80 0-5 11-75 14-80 0Z" fill="url(#ufo-shell)" stroke="#d3fbff" stroke-width="2"/>
+      <path d="M23 35c12 5 46 5 58 0" stroke="#f0ffff" stroke-opacity=".8" stroke-width="1.5"/>
+      <path d="M36 26c7-5 25-5 32 0" stroke="#e6fdff" stroke-opacity=".72" stroke-width="1.3"/>
+      <circle cx="27" cy="36" r="2" fill="#d9ffff" stroke="none"/>
+      <circle cx="52" cy="39" r="2" fill="#d9ffff" stroke="none"/>
+      <circle cx="77" cy="36" r="2" fill="#d9ffff" stroke="none"/>
+    </svg>
+  </span>
+  <span class="cloud-label">云端自检</span>
+</button>
+
+<!-- 专属硬件入口，不与设备是否在线的状态混淆。 -->
+<button class="gemini-entry hub-entry" type="button" data-feature="7"
+        aria-label="Gemini-S1 端侧智能节点，进入专属页面"
+        aria-expanded="false" aria-controls="side-panel">
+  <span class="gemini-chip" aria-hidden="true">
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="11" y="11" width="26" height="26" rx="6"/>
+      <rect x="17" y="17" width="14" height="14" rx="3"/>
+      <path d="M17 5v6M24 5v6M31 5v6M17 37v6M24 37v6M31 37v6M5 17h6M5 24h6M5 31h6M37 17h6M37 24h6M37 31h6"/>
+      <path d="M19 24h3l2-4 2 8 2-4h2"/>
+    </svg>
+  </span>
+  <span class="gemini-label">Gemini-S1 <small>端侧节点</small></span>
+</button>
+
+<!-- 原白色输入框所在区域改为纯展示/导航的复盘小卡片；不使用真实任务数量。 -->
+<button class="recap-entry hub-entry" type="button" data-feature="6"
+        aria-label="进入巡检复盘与结构化任务中心" aria-expanded="false"
+        aria-controls="side-panel">
+  <span class="recap-icon" aria-hidden="true">
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="5" width="18" height="23" rx="3"/>
+      <path d="M12 12h8M12 17h8M12 22h5M12 4h8"/>
+    </svg>
+  </span>
+  <span class="recap-copy">
+    <strong>巡检复盘 <span>· 结构化任务</span></strong>
+    <span class="recap-subtitle">任务记录与巡检结果待接入</span>
+  </span>
+  <span class="recap-launch" aria-hidden="true">
+    <span>查看</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+  </span>
+</button>
+
+      <p class="scene-stamp" id="scene-stamp">正式场景图 · 虚构示意</p>
+      <div class="spot-list" id="spot-list" aria-label="功能入口列表"></div>
+    </main>
+
+    <aside class="side-panel" id="side-panel" aria-hidden="true" aria-labelledby="panel-title">
+      <div class="panel-scroll" id="panel-content"></div>
+    </aside>
+
+    <section class="assistant-sheet" id="assistant-sheet" hidden aria-labelledby="assistant-title">
+      <header class="sheet-head">
+        <div>
+          <p class="eyebrow">真实接口 · 不生成模拟回复</p>
+          <h2 id="assistant-title">巡查助手</h2>
+        </div>
+        <div class="sheet-head-actions">
+          <span class="chat-state" id="chat-state">待首次回复</span>
+          <button class="icon-btn" type="button" id="sheet-close" aria-label="收起巡查助手">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="transcript" id="transcript" role="log" aria-live="polite" aria-label="助手对话记录"></div>
+      <details class="token-box" id="token-details">
+        <summary>访问口令（仅当前标签页）</summary>
+        <div class="token-row">
+          <label class="sr-only" for="token-input">访问口令</label>
+          <input id="token-input" type="password" autocomplete="off" placeholder="维护者提供时填写">
+          <button type="button" class="mini-btn" id="token-save">保存</button>
+          <button type="button" class="mini-btn mini-quiet" id="token-clear">清除</button>
+        </div>
+        <p class="token-state" id="token-state">尚未设置；只保存在本页会话，不写入日志。</p>
+      </details>
+    </section>
+
+    <footer class="dock" id="dock">
+      <div class="dock-inner">
+        <form class="composer" id="chat-form" novalidate>
+          <label class="sr-only" for="chat-input">输入巡查目标</label>
+          <textarea id="chat-input" name="message" rows="2" maxlength="2000" placeholder="例如：明早九点前，先看大坝坝顶和下游观察点。"></textarea>
+          <div class="composer-meta">
+            <span>仅生成待确认计划；车辆执行未接入</span>
+            <span id="char-count">0 / 2000</span>
+          </div>
+          <button type="submit" class="send-btn" id="send-button">
+            <span>发送</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+
+      </div>
+      <p class="dock-note" id="dock-note">语音识别结果进入现有命令处理链路；文字输入仍可编辑，车辆执行仍需确认。</p>
+    </footer>
+
+    <button class="voice-btn" type="button" id="voice-btn" aria-label="语音输入" aria-expanded="false">
+      <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="11" rx="3"/>
+        <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/>
+      </svg>
+    </button>
+
+    <section class="voice-pop" id="voice-pop" role="dialog" aria-labelledby="voice-title" hidden>
+      <header class="voice-head">
+        <div>
+          <p class="eyebrow">语音入口</p>
+          <h2 id="voice-title">点击说话</h2>
+        </div>
+        <button class="icon-btn" type="button" id="voice-close" aria-label="关闭语音入口">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="voice-body">
+        <div class="voice-orb" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="3" width="6" height="11" rx="3"/>
+            <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/>
+          </svg>
+          <span class="voice-wave"><i></i><i></i><i></i><i></i><i></i></span>
+        </div>
+
+        <p class="voice-status" id="voice-status" role="status" aria-live="polite">正在检查本页的麦克风与识别配置…</p>
+        <p class="voice-hint" id="voice-hint">没有识别结果时，不会自动填入文字。</p>
+
+        <div class="voice-actions">
+          <button class="primary-btn" type="button" id="voice-main">开始说话</button>
+          <button class="mini-btn" type="button" id="voice-cancel" hidden>取消</button>
+          <button class="mini-btn mini-quiet" type="button" id="voice-manual">手动输入</button>
+        </div>
+
+        <p class="voice-endpoint" id="voice-endpoint">识别配置读取中…</p>
+
+        <details class="voice-details">
+          <summary>为什么可能不可用</summary>
+          <ul>
+            <li>Firefox 107 没有可用的网页语音识别；本页不使用 Web Speech API，也不会把猜测写成转写结果。</li>
+            <li>识别必须由同源 ASR 服务或设备上的独立 ASR 入口提供；当前配置未填写端点时，只采集录音，不生成文字。</li>
+            <li>如果页面响应头仍是 <code>microphone=()</code>，浏览器会在授权前直接拒绝录音；本样板路径已申请只对本页放开，部署后仍需实测确认。</li>
+            <li>如果通过普通 <code>http://局域网IP</code> 打开，浏览器会把页面当作非安全上下文，同样不允许麦克风；需要 HTTPS，或在本机用 localhost 端口转发测试。</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <div class="modal" id="help-modal" hidden>
+      <div class="modal-backdrop" data-close-help></div>
+      <section class="modal-card" id="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title" tabindex="-1">
+        <header class="modal-head">
+          <div>
+            <p class="eyebrow">样板说明</p>
+            <h2 id="help-title">这是场景入口，不是地图或现场证据</h2>
+          </div>
+          <button class="icon-btn" type="button" data-close-help aria-label="关闭场景说明">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
+        </header>
+        <div class="modal-body">
+          <ul class="help-list">
+            <li><strong>入口与返回</strong><span>首页功能入口进入对应占位页。返回按钮、Escape 和浏览器后退都可用。</span></li>
+            <li><strong>首页入口</strong><span>执行异常、异常事件和巡迹地图为明确标注的占位入口。</span></li>
+            <li><strong>真实边界</strong><span>没有车控、固件或运动接口；不创建无法执行的计划，不伪造车辆、定位、水位或安全结论。</span></li>
+            <li><strong>聊天</strong><span>发送走现有 <code>/api/chat</code>；未配置模型时展示 503，不生成模拟回复。确认计划不等于执行。</span></li>
+            <li><strong>语音</strong><span>语音识别由设备端语音服务提供；识别文字进入现有命令处理链路。</span></li>
+            <li><strong>轻量动效</strong><span>局部水光、波纹与面板推进只用 transform/opacity；支持“静态展示”、减少动效偏好和隐藏页面暂停。</span></li>
+            <li><strong>键盘</strong><span>Tab 移动焦点，Escape 逐层返回，Ctrl/⌘ + Enter 发送。热点与主操作不小于 56px。</span></li>
+            <li><strong>性能采样</strong><span>仅地址带 <code>?perf=1</code> 时显示 rAF 帧间隔采样；它是浏览器帧间隔，不是 GPU 帧率。</span></li>
+          </ul>
+          <p class="help-truth">当前主视觉是已交付的 v13 水面场景图（虚构示意，不是现场照片或地图）；页面首屏直接加载正式图，不再先显示构图首稿。</p>
+        </div>
+        <footer class="modal-foot">
+          <button class="primary-btn" type="button" data-close-help id="help-ok">知道了</button>
+        </footer>
+      </section>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <p class="sr-only" id="live" aria-live="polite"></p>
+
+    <div class="perf" id="perf" hidden>
+      <strong>rAF 帧间隔采样</strong>
+      <span id="perf-text">采样中…</span>
+      <small>浏览器帧间隔，不是 GPU 帧率；仅 ?perf=1 显示。</small>
+    </div>
+
+    <noscript>
+      <p class="noscript-note">本样板需要 JavaScript 才能展开热点、草案和真实聊天入口。场景图仍会显示，但交互不可用。</p>
+    </noscript>
+  </div>
+</body>
+</html>
+
+
+

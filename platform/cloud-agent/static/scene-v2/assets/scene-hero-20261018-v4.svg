@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900"
+     role="img" aria-label="原创水利园区示意：弧形大坝、下泄水流、流线河道与右侧科研楼">
+  <defs>
+    <linearGradient id="water" x1="0" y1="0" x2=".4" y2="1">
+      <stop stop-color="#3adcee"/><stop offset=".45" stop-color="#0a78e9"/><stop offset="1" stop-color="#08299c"/>
+    </linearGradient>
+    <linearGradient id="wall" x1="0" x2="1" y2=".4">
+      <stop stop-color="#f7fdff"/><stop offset=".6" stop-color="#c1d9e9"/><stop offset="1" stop-color="#6d9cbe"/>
+    </linearGradient>
+
+    <!-- 陆地：从画框左上近白，向岸线一侧转浅冰蓝 -->
+    <linearGradient id="landWash" x1=".1" y1="0" x2=".55" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="48%" stop-color="#f7fcff"/>
+      <stop offset="100%" stop-color="#dff0fa"/>
+    </linearGradient>
+
+    <!-- 水体远端的大气雾化 -->
+    <linearGradient id="waterHaze" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity=".5"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- 底部压暗，保证 dock 与文案对比 -->
+    <linearGradient id="deepFoot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#031a52" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#031a52" stop-opacity=".3"/>
+    </linearGradient>
+
+    <!-- 岸线软雾：让陆地与水面之间不是一条硬边 -->
+    <filter id="shoreHaze" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+
+    <clipPath id="waterClip">
+      <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700V1100H1700V-100Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- ===================== 画布：统一压到 16:9（纵向 0.9） ===================== -->
+  <g transform="matrix(1,0,0,0.9,0,0)">
+
+    <!-- ============ 1. 陆地底色 ============ -->
+    <rect width="1600" height="1000" fill="url(#landWash)"/>
+
+    <!-- 岸线两侧的软雾：淡蓝气团，只做纵深，不做实体地物 -->
+    <g filter="url(#shoreHaze)" fill="none" stroke-linecap="round">
+      <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700"
+            stroke="#bcdcf0" stroke-width="150" opacity=".38"/>
+      <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700"
+            stroke="#dfeefa" stroke-width="70" opacity=".55"/>
+    </g>
+
+    <!-- ============ 2. 水体 ============ -->
+    <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700V1100H1700V-100Z" fill="url(#water)"/>
+    <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700V1100H1700V-100Z" fill="url(#waterHaze)"/>
+
+    <!-- ============ 3. 静态水面：浅滩、色带与流线（不加水波动画） ============ -->
+    <g clip-path="url(#waterClip)">
+      <!-- 近岸浅滩：贴着岸线的一道青色带，让水陆交界有深度而不是硬切 -->
+      <g fill="none" stroke-linecap="round">
+        <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700" stroke="#8ce6f6" stroke-width="80" opacity=".18"/>
+        <path d="M850-100C580 120 1230 220 910 380S400 480 160 580L-100 700" stroke="#c8f6ff" stroke-width="26" opacity=".22"/>
+      </g>
+      <path d="M540 300C860 350 1180 400 1700 372L1700 452C1180 480 860 430 540 380Z" fill="#ffffff" opacity=".1"/>
+      <path d="M470 470C820 530 1200 566 1700 548L1700 616C1200 634 820 598 470 538Z" fill="#ffffff" opacity=".07"/>
+      <path d="M380 640C780 700 1220 728 1700 706L1700 790C1220 812 780 784 380 724Z" fill="#0a1f6e" opacity=".15"/>
+      <path d="M300 800C740 852 1240 872 1700 852L1700 1000L300 1000Z" fill="#051f6b" opacity=".16"/>
+      <g fill="none" stroke="#ffffff" stroke-linecap="round">
+        <path d="M980 470C1140 500 1330 512 1560 508" stroke-width="4" opacity=".14"/>
+        <path d="M1020 560C1200 588 1400 598 1620 592" stroke-width="5" opacity=".11"/>
+        <path d="M900 660C1120 692 1360 702 1640 694" stroke-width="6" opacity=".09"/>
+        <path d="M860 790C1100 820 1380 830 1660 820" stroke-width="7" opacity=".07"/>
+      </g>
+    </g>
+
+    <!-- ============ 4. 右侧科研半岛 ============ -->
+    <g transform="translate(160 20) scale(.79)">
+      <path d="M1250 0H2200V570L1320 510 1190 435 1110 370 1155 315 1230 265Z" fill="#b1d6e7"/>
+      <path d="M1280 0H2200V530L1310 470 1170 365 1270 282Z" fill="#f3f9fc"/>
+      <path d="M1290 440L1540 492M1255 410L1530 465" stroke="#8db3cc" stroke-width="2"/>
+      <path d="M1170 190L1430 125 1580 180 1320 253Z" fill="#fff"/>
+      <path d="M1170 190V332L1320 402V253Z" fill="#b7cfdf"/>
+      <path d="M1320 253L1580 180V326L1320 402Z" fill="#0b3a88"/>
+      <path d="M1320 280L1580 210M1320 322L1580 252M1320 363L1580 293" stroke="#56a7dc" stroke-width="3"/>
+      <path d="M1360 241V390M1410 227V376M1460 213V361M1510 199V347" stroke="#a2c8e0" stroke-width="2"/>
+      <path d="M1143 180L1430 108 1600 169 1580 184 1430 137 1170 206Z" fill="#fcffff"/>
+      <path d="M1220 190V112L1420 65 1510 98V174L1420 143Z" fill="#d2e2ec"/>
+      <path d="M1220 112L1420 65 1510 98 1310 151Z" fill="#fff"/>
+      <path d="M1310 151L1510 98V174L1310 231Z" fill="#063578"/>
+      <path d="M1330 158L1490 114V153L1330 198Z" fill="#1c6cbd"/>
+      <path d="M1170 332L1320 402 1300 418 1150 348Z" fill="#fff"/>
+    </g>
+
+    <!-- ============ 5. 大坝 ============ -->
+    <g transform="translate(-90 140) scale(.84)">
+      <path d="M-70 610Q350 362 890 445L1050 650 970 738Q390 630-70 910Z" fill="#031b64" opacity=".45"/>
+      <path d="M-60 549Q400 286 955 435L1010 648Q465 495-45 830Z" fill="url(#wall)"/>
+      <path d="M-60 549Q400 286 955 435L987 482Q405 325-45 604Z" fill="#fff"/>
+      <path d="M-50 579Q420 318 970 456" fill="none" stroke="#6c97b9" stroke-width="4"/>
+      <path d="M350 466L474 451 496 659 375 688Z" fill="#031b58"/>
+      <path d="M532 447L658 454 694 642 569 648Z" fill="#031b58"/>
+      <path d="M718 464L830 486 874 668 759 646Z" fill="#031b58"/>
+      <g fill="#1452a5">
+        <path d="M366 487L457 477 475 615 389 635Z"/>
+        <path d="M548 470L644 475 670 612 580 616Z"/>
+        <path d="M733 488L815 505 846 635 770 619Z"/>
+      </g>
+      <g stroke="#467fa9" stroke-width="3">
+        <path d="M374 520L463 510M379 552L468 542M385 584L473 574M553 504L650 510M559 540L657 545M566 576L664 580M742 522L824 540M750 557L831 575M758 592L840 609"/>
+      </g>
+      <path d="M474 451L495 449 543 670 513 691 496 659Z" fill="#fff"/>
+      <path d="M495 449L523 465 566 658 543 670Z" fill="#82adca"/>
+      <path d="M658 454L681 458 738 659 713 678 694 642Z" fill="#f8ffff"/>
+      <path d="M681 458L707 480 760 649 738 659Z" fill="#82adca"/>
+      <path d="M830 486L851 492 912 695 887 709 874 668Z" fill="#f8ffff"/>
+      <path d="M389 635L475 615 513 691 676 768 558 799 405 715Z" fill="#3ce0eb"/>
+      <path d="M580 616L670 612 713 678 890 743 782 770 612 706Z" fill="#72f0f0"/>
+      <path d="M770 619L846 635 887 709 1030 762 958 782 802 717Z" fill="#31bedf"/>
+      <g fill="none" stroke="#d5ffff" stroke-width="4" opacity=".75">
+        <path d="M408 643L435 701 588 771"/>
+        <path d="M602 631L633 688 812 747"/>
+        <path d="M793 640L824 701 968 761"/>
+      </g>
+      <path d="M25 521Q430 318 937 427" fill="none" stroke="#173f66" stroke-width="2"/>
+      <g stroke="#173f66" stroke-width="3">
+        <path d="M60 505v32M190 452v32M330 410v32M470 390v30M610 390v29M750 400v28M890 418v25"/>
+      </g>
+    </g>
+
+    <!-- ============ 6. 收边 ============ -->
+    <rect x="0" y="700" width="1600" height="300" fill="url(#deepFoot)"/>
+  </g>
+</svg>

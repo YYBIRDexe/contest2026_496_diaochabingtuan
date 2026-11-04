@@ -116,3 +116,33 @@ Events checked: 10048
 
 三处原始 Codex rollout（`.codex/sessions/**/rollout-*.jsonl`，共约 65 MB）
 均由本队留存，可随时提供以核对上述转换的忠实性。
+
+## 八、后续会话自动采集
+
+本仓库配置了本机 Git `pre-commit` hook。执行 `git commit` 时，
+`tools/collect-codex-sessions.js` 会从 `CODEX_HOME/sessions/`（未设置时为
+`~/.codex/sessions/`）读取 Codex rollout，只采集 `cwd` 等于本仓库根目录或其工作区目录的会话，
+将 `response_item` 转成上述 JSONL 格式，并把新日志及 `manifest.json` 自动加入本次提交。
+因此，日志在下一次提交时采集，不是对话实时上传；运行时只访问本机文件，不向网络发送数据。
+
+### 多人协作配置（每位成员各自执行）
+
+每位成员必须克隆自己的本地副本，并在自己的 `~/.claude/contest-collector.env` 中设置本人的 GitHub 用户名；
+不要把该文件复制到仓库，也不要沿用队友的用户名。例如：
+
+```dotenv
+TEAM_ID=contest2026_496_diaochabingtuan
+GITHUB_LOGIN=<本人的 GitHub username>
+```
+
+本机 Codex 采集器会读取此文件，并写入 `logs/<GITHUB_LOGIN>/`。身份缺失或 `TEAM_ID` 与本仓库不符时会停止采集，避免日志误归属。克隆后还需在本地仓库启用钩子：
+
+```sh
+git config --local core.hooksPath .githooks
+node tools/collect-codex-sessions.js --check-config
+```
+
+第二条命令只显示当前账号及目标目录，不会读取会话或写日志。每位成员提交前先拉取团队仓库最新变更，再提交自己的 `logs/<username>/`；按代码提交指南推送到个人 fork 并向团队专属仓库发起 PR。
+
+钩子只做 `sk-*`、GitHub token 与 `Bearer` 凭证的脱敏。提交前请检查自动暂存的会话日志，
+确认没有不应进入仓库的内容。若 Git 界面没有继承 Node.js 的 `PATH`，请从已配置 Node.js 的终端执行提交。

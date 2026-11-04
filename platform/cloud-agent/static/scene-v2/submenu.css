@@ -1,0 +1,67 @@
+/* VelaGuard E5-friendly read-only submenus; only affects feature pages. */
+.panel-scroll[data-mode="feature"] { overflow-y:auto; overscroll-behavior:contain; }
+.panel-scroll[data-mode="feature"] .workspace-top { position:sticky; top:0; z-index:3; background:#f4f9fd; }
+.submenu-root { max-width:1380px; margin:auto; padding:16px clamp(18px,3.3vw,52px) 60px; color:#153859; }
+.submenu-kicker { color:#3b79a0; font-size:11px; letter-spacing:.12em; margin:0 0 4px; font-weight:800; }
+.submenu-intro { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.submenu-intro h3 { margin:0; font-size:clamp(21px,2.2vw,29px); line-height:1.22; }
+.submenu-intro p { font-size:12px; margin:0; color:#526d81; max-width:720px; }
+.submenu-tabs { display:flex; gap:9px; padding:13px 0 11px; overflow-x:auto; scrollbar-width:thin; }
+.submenu-tab { flex:1 0 auto; min-width:136px; min-height:49px; border:1px solid #b7d1e1; border-radius:12px; background:#e7f2f9; color:#1a507b; font-size:15px; font-weight:750; padding:10px 14px; }
+.submenu-tab.active { border-color:#1776b9; background:#0d477c; color:#fff; box-shadow:0 3px 10px #153f7126; }
+.submenu-tab:focus-visible,.submenu-guide:focus-visible,.submenu-mini-btn:focus-visible,.submenu-link:focus-visible,.submenu-back:focus-visible { outline:3px solid #00bce6; outline-offset:2px; }
+.submenu-content { background:#fff; border:1px solid #d6e7f1; border-radius:16px; padding:clamp(14px,2vw,24px); box-shadow:0 6px 26px #274b6e0b; }
+.submenu-topline { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
+.submenu-chip { display:inline-block; max-width:100%; padding:5px 9px; border-radius:8px; background:#eaf2f9; color:#39749b; font-size:11px; font-weight:750; overflow-wrap:anywhere; }
+.submenu-chip.safety { color:#916439; background:#fff3e4; }
+.submenu-chip.loading { background:#edf5ff; }
+.submenu-chip.ready { background:#e5f8f2; color:#0f6956; }
+.submenu-chip.error,.submenu-chip.offline { background:#fff0ee; color:#9e453f; }
+.submenu-chip.stale { background:#fff1dc; color:#835d1b; }
+.submenu-info h4 { margin:0 0 4px; font-size:19px; }
+.submenu-info p { margin:0 0 13px; color:#506d86; font-size:13px; }
+.submenu-state { padding:13px 15px; margin:4px 0 12px; border:1px solid #c5deeb; border-radius:12px; background:#f1f8fc; }
+.submenu-state p { margin:7px 0 0; font-size:13px; color:#4e6d85; }
+.submenu-state.error,.submenu-state.offline { background:#fff8f7; border-color:#efc7c1; }
+.submenu-state.stale { background:#fffaf2; border-color:#ebd4ae; }
+.submenu-guides { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.submenu-guide { border:1px solid #c8dfe9; border-radius:12px; background:linear-gradient(145deg,#edf8fd,#f6fbff); color:#164e7b; min-height:73px; padding:12px 14px; text-align:left; display:flex; flex-direction:column; justify-content:center; gap:5px; }
+.submenu-guide strong { font-size:15px; } .submenu-guide small { font-size:11px; color:#66839a; }
+.submenu-action { border-top:1px solid #ddebf2; margin-top:15px; padding-top:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.submenu-disabled { padding:10px 15px; min-height:44px; border-radius:9px; background:#e4ebf1; border:1px solid #c8d5df; color:#798b9c; font-size:13px; font-weight:700; cursor:not-allowed; }
+.submenu-action p { margin:0; flex:1; color:#73889b; font-size:12px; }
+.submenu-link,.submenu-back,.submenu-mini-btn { min-height:42px; border:1px solid #b8d6e6; color:#12629b; font-weight:700; background:#edf8fd; border-radius:9px; padding:9px 14px; margin-top:10px; }
+.submenu-back { margin:0 0 12px; }
+.submenu-detail h4 { margin:0 0 10px; font-size:21px; }
+.submenu-guidelines { padding:0 0 0 23px; margin:6px 0 0; display:grid; gap:12px; color:#294b65; font-size:14px; line-height:1.5; }
+.submenu-records { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-bottom:10px; }
+.submenu-record { background:#f7fbfd; border:1px solid #d0e1ec; border-radius:10px; padding:12px; }
+.submenu-record strong { font-size:15px; }
+.submenu-record p { font-size:12px; color:#5c798b; margin:7px 0 0; overflow-wrap:anywhere; }
+.submenu-record-detail { grid-column:1/-1; padding:10px; }
+.submenu-meta { font-size:11px!important; color:#70889a!important; }
+.submenu-field-list { display:grid; grid-template-columns:minmax(110px,34%) 1fr; border-top:1px solid #d5e7f0; margin:10px 0; }
+.submenu-field-list dt,.submenu-field-list dd { margin:0; border-bottom:1px solid #d5e7f0; padding:10px 6px; font-size:12px; overflow-wrap:anywhere; }
+.submenu-field-list dt { font-weight:750; } .submenu-field-list dd { color:#536f84; }
+.submenu-context { border:1px solid #b8dced; background:#ecf8ff; border-radius:10px; padding:12px; margin-bottom:13px; }
+.submenu-context strong { font-size:12px; overflow-wrap:anywhere; }
+.submenu-context p { font-size:11px; margin:5px 0; color:#5a778b; }
+@media (max-width:900px) { .submenu-root { padding:10px 14px 30px; } .submenu-intro h3 { font-size:19px; } .submenu-intro p { font-size:11px; } .submenu-tabs { padding:8px 0; gap:6px; } .submenu-tab { min-width:115px; min-height:44px; padding:7px 8px; font-size:13px; } .submenu-content { padding:12px; } .submenu-info h4 { font-size:17px; } .submenu-info p,.submenu-state p { font-size:12px; } .submenu-guide { min-height:62px; padding:9px 11px; } .submenu-guide strong { font-size:13px; } .submenu-action { margin-top:10px; } }
+@media (max-width:480px) { .submenu-guides { grid-template-columns:1fr; } .submenu-intro p { max-width:100%; } .submenu-tab { min-width:120px; } }
+
+/* V11 preset map: native vector geometry retained from user PDF. */
+.preset-map-head {display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.preset-map-head h4 {margin:0 0 5px;font-size:21px;color:#153e62;}
+.preset-map-head p,.preset-map-note {margin:0;color:#526e83;font-size:12px;line-height:1.6;}
+.preset-map-controls {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.preset-map-controls button {margin:0;min-height:44px;}
+.preset-map-scale {font-size:12px;color:#47728e;min-width:65px;}
+.preset-map-viewport {overflow:auto;max-height:65vh;border:1px solid #b6d4e3;border-radius:12px;background:#e9f2f7;}
+.preset-map-image {display:block;width:100%;max-width:none;height:auto;}
+.preset-map-viewport[data-zoom="2"] .preset-map-image {width:200%;}
+.preset-map-viewport[data-zoom="3"] .preset-map-image {width:300%;}
+.preset-map-note {margin-top:10px;}
+@media(max-width:900px){.preset-map-head h4{font-size:18px;}.preset-map-viewport{max-height:58vh;}.preset-map-controls{gap:6px;}}
+
+.preset-map-viewport[data-zoom="1"] .preset-map-image {max-height:65vh;object-fit:contain;}
+@media(max-width:900px){.preset-map-viewport[data-zoom="1"] .preset-map-image{max-height:58vh;}}

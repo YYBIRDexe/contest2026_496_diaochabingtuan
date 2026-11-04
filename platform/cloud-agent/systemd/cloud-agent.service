@@ -1,0 +1,26 @@
+# Installed by scripts/remote-install.sh as:
+#   ~/.config/systemd/user/velaguard-cloud-agent.service
+# The service name is velaguard-cloud-agent.service.  Do not print or copy the
+# contents of the environment file; systemd reads it in place.
+[Unit]
+Description=VelaGuard cloud agent (platform-side cognitive service)
+Documentation=file:%h/cloud-agent/current/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/cloud-agent/current
+EnvironmentFile=-%h/.config/velaguard-cloud-agent/cloud-agent.env
+Environment=CLOUD_AGENT_ENV_FILE=%h/.config/velaguard-cloud-agent/cloud-agent.env
+Environment=CLOUD_AGENT_STATE_DIR=%h/.local/state/cloud-agent
+ExecStart=/usr/bin/python3 %h/cloud-agent/current/app.py --host 0.0.0.0 --port 8130
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

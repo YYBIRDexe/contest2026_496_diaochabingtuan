@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 300" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">智能巡检车与水下机器人编队</title>
+  <desc id="desc">蓝白色四轮巡检车与水下机器人通过通信缆协同作业的矢量示意。</desc>
+  <defs>
+    <linearGradient id="deck" x1="42" y1="102" x2="298" y2="170" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4FCFF"/>
+      <stop offset="1" stop-color="#9CCBE4"/>
+    </linearGradient>
+    <linearGradient id="body" x1="90" y1="68" x2="218" y2="136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#B9D9EA"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="126" y1="64" x2="184" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4BD8E8"/>
+      <stop offset="1" stop-color="#0A4A91"/>
+    </linearGradient>
+    <linearGradient id="rov" x1="293" y1="176" x2="419" y2="254" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EAF9FF"/>
+      <stop offset="1" stop-color="#8ABDD9"/>
+    </linearGradient>
+    <filter id="soft" x="0" y="0" width="520" height="300" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+
+  <!-- quiet water/deck cues -->
+  <ellipse cx="203" cy="155" rx="172" ry="20" fill="#073B78" opacity=".12" filter="url(#soft)"/>
+  <path d="M18 137 158 91 328 130 184 180 18 137Z" fill="url(#deck)" stroke="#F5FDFF" stroke-width="3"/>
+  <path d="m18 137 166 43 144-50" stroke="#4DB8D8" stroke-width="3" opacity=".85"/>
+  <path d="M26 145 160 181M62 130l137 37M245 118l61 14" stroke="#FFFFFF" stroke-width="2" opacity=".75"/>
+  <path d="M28 202c46-13 86-12 126 0m-92 18c34-8 67-8 99 0" stroke="#63DCEB" stroke-width="2.5" stroke-linecap="round" opacity=".65"/>
+
+  <!-- surface inspection rover: four wheels, compact body and sensor mast -->
+  <g transform="translate(48 20)">
+    <ellipse cx="105" cy="124" rx="92" ry="15" fill="#06376F" opacity=".18"/>
+    <g fill="#092B5B" stroke="#DDF7FF" stroke-width="2">
+      <path d="m32 90 20-7 9 34-20 7-9-34Z"/>
+      <path d="m168 112 20-8 8 32-20 8-8-32Z"/>
+      <path d="m62 118 18-7 8 28-18 7-8-28Z"/>
+      <path d="m150 80 18-7 8 29-18 7-8-29Z"/>
+    </g>
+    <g fill="#1A76B9">
+      <path d="m37 93 10-4 5 22-10 4-5-22Z"/>
+      <path d="m173 115 10-4 5 21-10 4-5-21Z"/>
+      <path d="m66 121 9-4 5 17-9 4-5-17Z"/>
+      <path d="m154 83 9-4 5 18-9 4-5-18Z"/>
+    </g>
+    <path d="m45 80 72-34 66 22-72 37-66-25Z" fill="#D8F0FA" stroke="#0A3B78" stroke-width="3" stroke-linejoin="round"/>
+    <path d="m45 80 66 25v29L45 109V80Z" fill="#79B8D6" stroke="#0A3B78" stroke-width="3" stroke-linejoin="round"/>
+    <path d="m111 105 72-37v28l-72 38v-29Z" fill="#286DAA" stroke="#0A3B78" stroke-width="3" stroke-linejoin="round"/>
+    <g fill="#062653" stroke="#DDF7FF" stroke-width="2">
+      <path d="m39 91 15-6 8 29-15 6-8-29Z"/>
+      <path d="m164 65 15-7 8 28-15 7-8-28Z"/>
+      <path d="m57 116 15-6 8 26-15 6-8-26Z"/>
+      <path d="m153 95 15-7 8 28-15 7-8-28Z"/>
+    </g>
+    <g stroke="#56D9E9" stroke-width="2" opacity=".9">
+      <path d="m45 95 9 25m115-50 9 25M63 119l8 22m96-48 8 23"/>
+    </g>
+    <path d="m68 73 49-23 42 14-49 25-42-16Z" fill="url(#glass)" stroke="#E8FBFF" stroke-width="2"/>
+    <path d="m111 89 48-24v20l-48 25V89Z" fill="#0A3C79" opacity=".92"/>
+    <path d="m77 68 39-18m-17 30 42-20" stroke="#A7F7FF" stroke-width="2" opacity=".85"/>
+    <path d="m107 46 0-20 10-6 10 5v21" stroke="#0B3D78" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M117 20V10" stroke="#0B3D78" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="117" cy="8" r="6" fill="#36DCEB" stroke="#FFFFFF" stroke-width="2"/>
+    <path d="M117 10c13-9 25-8 34-2" stroke="#36DCEB" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 5"/>
+    <path d="m56 113 54 21 65-34" stroke="#F5FDFF" stroke-width="2" opacity=".75"/>
+    <circle cx="174" cy="57" r="5" fill="#36DCEB"/>
+    <path d="M174 57h15" stroke="#36DCEB" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- communication tether between the surface rover and the underwater unit -->
+  <path d="M220 136c28 16 35 26 43 47 7 19 18 24 35 25" stroke="#DDFBFF" stroke-width="5" stroke-linecap="round"/>
+  <path d="M220 136c28 16 35 26 43 47 7 19 18 24 35 25" stroke="#1388C8" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 6"/>
+
+  <!-- underwater ROV: open protective frame, thrusters, camera and lights -->
+  <g transform="translate(258 156)">
+    <ellipse cx="91" cy="105" rx="102" ry="14" fill="#052D68" opacity=".22" filter="url(#soft)"/>
+    <path d="m28 30 114-12 33 30-14 68-117 9-30-31 14-64Z" fill="url(#rov)" stroke="#0A3C78" stroke-width="4" stroke-linejoin="round"/>
+    <path d="m28 30 31 28-15 67-30-31 14-64Z" fill="#2C82B8" stroke="#0A3C78" stroke-width="3"/>
+    <path d="m59 58 83-8 18 18-10 47-86 8-20-18 15-47Z" fill="#0A3A78" stroke="#DDF7FF" stroke-width="3" stroke-linejoin="round"/>
+    <path d="m72 66 58-6 12 11-7 30-60 6-12-12 9-29Z" fill="url(#glass)" stroke="#A8F6FF" stroke-width="2"/>
+    <path d="m77 73 18-2 8 22-18 2-8-22Z" fill="#DDFBFF" opacity=".72"/>
+    <path d="M19 25 6 13m151 0 14-12M8 105l-13 12m166-12 15 11" stroke="#0A3C78" stroke-width="7" stroke-linecap="round"/>
+    <g fill="#0A3C78" stroke="#DDF7FF" stroke-width="2">
+      <circle cx="5" cy="12" r="13"/><circle cx="172" cy="1" r="13"/>
+      <circle cx="-7" cy="119" r="13"/><circle cx="180" cy="116" r="13"/>
+    </g>
+    <g fill="#36DCEB" stroke="#DDF7FF" stroke-width="1.5">
+      <circle cx="5" cy="12" r="4"/><circle cx="172" cy="1" r="4"/>
+      <circle cx="-7" cy="119" r="4"/><circle cx="180" cy="116" r="4"/>
+    </g>
+    <circle cx="96" cy="82" r="8" fill="#E8FCFF" stroke="#36DCEB" stroke-width="3"/>
+    <circle cx="96" cy="82" r="3" fill="#0A3C78"/>
+    <path d="M51 126h83" stroke="#0A3C78" stroke-width="4" stroke-linecap="round"/>
+    <path d="M65 133h54" stroke="#36DCEB" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="47" cy="45" r="5" fill="#36DCEB"/>
+    <circle cx="150" cy="42" r="5" fill="#36DCEB"/>
+  </g>
+
+  <!-- depth/sonar marks -->
+  <path d="M375 275c26-10 51-10 77 0m-61 12c18-6 35-6 52 0" stroke="#36DCEB" stroke-width="2.5" stroke-linecap="round" opacity=".72"/>
+  <path d="M438 176c12 7 18 17 19 29m-7-34c18 11 27 27 28 46" stroke="#A9F7FF" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+</svg>
